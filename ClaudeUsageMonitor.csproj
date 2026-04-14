@@ -9,6 +9,15 @@
         <ApplicationIcon>Assets/icon.ico</ApplicationIcon>
         <LangVersion>preview</LangVersion>
 
+        <Version>1.0.1</Version>
+        <ProductVersion>1.0.1</ProductVersion>
+        <ApplicationRevision>0</ApplicationRevision>
+        <ApplicationVersion>1.0.0.%2a</ApplicationVersion>
+
+        <Company>JakeSays</Company>
+        <Product>Claude Usage Monitor</Product>
+        <Copyright>Copyright (c) 2026 JakeSays</Copyright>
+
         <PublishAot>true</PublishAot>
         <IsAotCompatible>true</IsAotCompatible>
         <TrimMode>full</TrimMode>
