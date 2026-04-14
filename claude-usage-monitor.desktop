@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Claude Usage Monitor
+GenericName=Claude Code Usage Monitor
+Comment=Monitor Claude Code API usage limits
+Exec=/apps/ClaudeUsageMonitor/ClaudeUsageMonitor
+Icon=/apps/ClaudeUsageMonitor/claude-usage-monitor.png
+Terminal=false
+Categories=Utility;Monitor;
+StartupNotify=false
+StartupWMClass=ClaudeUsageMonitor
+Keywords=claude;anthropic;usage;monitor;
