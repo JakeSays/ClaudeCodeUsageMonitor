@@ -9,10 +9,10 @@
         <ApplicationIcon>Assets/icon.ico</ApplicationIcon>
         <LangVersion>preview</LangVersion>
 
-        <Version>1.0.1</Version>
-        <ProductVersion>1.0.1</ProductVersion>
+        <Version>1.0.2</Version>
+        <ProductVersion>$(Version)</ProductVersion>
         <ApplicationRevision>0</ApplicationRevision>
-        <ApplicationVersion>1.0.0.%2a</ApplicationVersion>
+        <ApplicationVersion>$(Version).%2a</ApplicationVersion>
 
         <Company>JakeSays</Company>
         <Product>Claude Usage Monitor</Product>
