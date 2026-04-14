@@ -37,10 +37,10 @@ public class ExtraUsage
     public bool IsEnabled { get; set; }
 
     [JsonPropertyName("monthly_limit")]
-    public int? MonthlyLimit { get; set; }
+    public double? MonthlyLimit { get; set; }
 
     [JsonPropertyName("used_credits")]
-    public int? UsedCredits { get; set; }
+    public double? UsedCredits { get; set; }
 
     [JsonPropertyName("utilization")]
     public double? Utilization { get; set; }
