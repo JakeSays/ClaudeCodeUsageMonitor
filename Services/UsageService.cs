@@ -26,6 +26,10 @@ public class UsageService : IDisposable
 
     public void Dispose() => _httpClient.Dispose();
 
+    public static bool CredentialsFileExists() => File.Exists(CredentialsPath);
+
+    public static string CredentialsFilePath => CredentialsPath;
+
     public async Task<UsageResponse?> GetUsageAsync()
     {
         await LoadCredentialsAsync();
@@ -43,42 +47,59 @@ public class UsageService : IDisposable
             }
         }
 
+        var result = await SendUsageRequestAsync();
+
+        if (result.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+        {
+            await RefreshTokenAsync();
+            result = await SendUsageRequestAsync();
+        }
+
+        if (result.StatusCode == HttpStatusCode.TooManyRequests)
+        {
+            await RefreshTokenAsync();
+            result = await SendUsageRequestAsync();
+
+            if (result.StatusCode == HttpStatusCode.TooManyRequests)
+            {
+                var retryAfter = result.RetryAfter ?? TimeSpan.FromMinutes(5);
+                if (retryAfter <= TimeSpan.Zero)
+                {
+                    retryAfter = TimeSpan.FromMinutes(5);
+                }
+                throw new RateLimitedException(retryAfter);
+            }
+        }
+
+        if (!result.IsSuccess)
+        {
+            throw new HttpRequestException(
+                $"Usage request failed with status {(int) result.StatusCode} {result.StatusCode}");
+        }
+
+        return JsonSerializer.Deserialize(result.Body, UsageJsonContext.Default.UsageResponse);
+    }
+
+    private async Task<UsageRequestResult> SendUsageRequestAsync()
+    {
         using var request = new HttpRequestMessage(HttpMethod.Get, UsageUrl);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _credentials.AccessToken);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _credentials!.AccessToken);
         request.Headers.Add("anthropic-beta", "oauth-2025-04-20");
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
-        var response = await _httpClient.SendAsync(request);
+        using var response = await _httpClient.SendAsync(request);
+        var body = await response.Content.ReadAsStringAsync();
+        var retryAfter = response.Headers.RetryAfter?.Delta
+                         ?? (response.Headers.RetryAfter?.Date - DateTimeOffset.UtcNow);
 
-        if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
-        {
-            await RefreshTokenAsync();
-
-            using var retryRequest = new HttpRequestMessage(HttpMethod.Get, UsageUrl);
-            retryRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _credentials.AccessToken);
-            retryRequest.Headers.Add("anthropic-beta", "oauth-2025-04-20");
-            retryRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-
-            response = await _httpClient.SendAsync(retryRequest);
-        }
-
-        if (response.StatusCode == HttpStatusCode.TooManyRequests)
-        {
-            var retryAfter = response.Headers.RetryAfter?.Delta
-                             ?? (response.Headers.RetryAfter?.Date - DateTimeOffset.UtcNow)
-                             ?? TimeSpan.FromMinutes(5);
-            if (retryAfter <= TimeSpan.Zero)
-            {
-                retryAfter = TimeSpan.FromMinutes(5);
-            }
-            throw new RateLimitedException(retryAfter);
-        }
-
-        response.EnsureSuccessStatusCode();
-
-        var json = await response.Content.ReadAsStringAsync();
-        return JsonSerializer.Deserialize(json, UsageJsonContext.Default.UsageResponse);
+        return new UsageRequestResult(response.StatusCode, response.IsSuccessStatusCode, body, retryAfter);
     }
+
+    private readonly record struct UsageRequestResult(
+        HttpStatusCode StatusCode,
+        bool IsSuccess,
+        string Body,
+        TimeSpan? RetryAfter);
 
     private async Task LoadCredentialsAsync()
     {

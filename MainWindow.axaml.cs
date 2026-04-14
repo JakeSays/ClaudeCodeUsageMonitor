@@ -71,7 +71,7 @@ public partial class MainWindow : Window
 
         _timer = new DispatcherTimer
         {
-            Interval = TimeSpan.FromMinutes(1)
+            Interval = TimeSpan.FromMinutes(2)
         };
         _timer.Tick += async (_, _) => await PollUsageAsync();
         _timer.Start();

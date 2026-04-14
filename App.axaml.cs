@@ -19,16 +19,31 @@ public class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
+            if (true || !UsageService.CredentialsFileExists())
+            {
+                var icons = TrayIcon.GetIcons(this);
+                if (icons != null)
+                {
+                    foreach (var icon in icons)
+                    {
+                        icon.IsVisible = false;
+                    }
+                }
+
+                desktop.ShutdownMode = ShutdownMode.OnLastWindowClose;
+                desktop.MainWindow = new NoCredentialsWindow();
+                desktop.MainWindow.Show();
+                base.OnFrameworkInitializationCompleted();
+                return;
+            }
+
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
             desktop.MainWindow = new MainWindow();
             desktop.MainWindow.Show();
         }
 
         var menu = FindMinimizeMenuItem();
-        if (menu != null)
-        {
-            menu.IsChecked = Settings.MinimizeToTray;
-        }
+        menu?.IsChecked = Settings.MinimizeToTray;
 
         base.OnFrameworkInitializationCompleted();
     }

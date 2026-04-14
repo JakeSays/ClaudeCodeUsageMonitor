@@ -1,6 +1,6 @@
 # Claude Code Usage Monitor
 
-A small desktop app that shows your current Claude Code usage limits at a glance. It reads the OAuth credentials that Claude Code already stores on disk, polls Anthropic's usage endpoint once a minute, and renders three gauges: the rolling 5-hour window, the 7-day overall window, and the 7-day Sonnet-specific window.
+A small desktop app that shows your current Claude Code usage limits at a glance. It reads the OAuth credentials that Claude Code already stores on disk, polls Anthropic's usage endpoint once every two minutes, and renders three gauges: the rolling 5-hour window, the 7-day overall window, and the 7-day Sonnet-specific window.
 
 ![Claude Code Usage Monitor](media/ClaudeUsageMonitor.png)
 
