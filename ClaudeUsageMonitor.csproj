@@ -10,7 +10,7 @@
         <ApplicationIcon>Assets/icon.ico</ApplicationIcon>
         <LangVersion>preview</LangVersion>
 
-        <Version>1.0.3</Version>
+        <Version>1.0.4</Version>
         <ProductVersion>$(Version)</ProductVersion>
         <ApplicationRevision>0</ApplicationRevision>
         <ApplicationVersion>$(Version).%2a</ApplicationVersion>
