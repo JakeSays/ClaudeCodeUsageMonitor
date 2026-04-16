@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Threading.Tasks;
 using ClaudeUsageMonitor.Models;
@@ -14,8 +16,12 @@ namespace ClaudeUsageMonitor.Services;
 
 public class UsageService : IDisposable
 {
+    private static readonly bool IsMacOS = RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
+
     private static readonly string CredentialsPath =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude", ".credentials.json");
+
+    private const string KeychainServiceName = "Claude Code-credentials";
 
     private const string TokenRefreshUrl = "https://platform.claude.com/v1/oauth/token";
     private const string UsageUrl = "https://api.anthropic.com/api/oauth/usage";
@@ -26,9 +32,25 @@ public class UsageService : IDisposable
 
     public void Dispose() => _httpClient.Dispose();
 
-    public static bool CredentialsFileExists() => File.Exists(CredentialsPath);
+    public static bool CredentialsExist()
+    {
+        if (!IsMacOS)
+            return File.Exists(CredentialsPath);
 
-    public static string CredentialsFilePath => CredentialsPath;
+        try
+        {
+            var json = ReadKeychain();
+            return json != null;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public static string CredentialsLocation => IsMacOS
+        ? $"macOS Keychain (service: \"{KeychainServiceName}\")"
+        : CredentialsPath;
 
     public async Task<UsageResponse?> GetUsageAsync()
     {
@@ -103,17 +125,83 @@ public class UsageService : IDisposable
 
     private async Task LoadCredentialsAsync()
     {
-        // Always read fresh from Claude Code's credentials file so we pick up any
-        // refresh it performs, and never hold a stale refresh_token that the server
-        // has rotated away under us.
-        if (!File.Exists(CredentialsPath))
+        // Always read fresh so we pick up any refresh Claude Code performs,
+        // and never hold a stale refresh_token that the server has rotated.
+        string? json;
+
+        if (IsMacOS)
         {
-            throw new FileNotFoundException($"No credentials file found at {CredentialsPath}");
+            json = ReadKeychain();
+            if (json == null)
+                throw new InvalidOperationException(
+                    $"No credentials found in macOS Keychain (service: \"{KeychainServiceName}\")");
+        }
+        else
+        {
+            if (!File.Exists(CredentialsPath))
+                throw new FileNotFoundException($"No credentials file found at {CredentialsPath}");
+
+            json = await File.ReadAllTextAsync(CredentialsPath);
         }
 
-        var json = await File.ReadAllTextAsync(CredentialsPath);
         var credFile = JsonSerializer.Deserialize(json, UsageJsonContext.Default.CredentialsFile);
         _credentials = credFile?.ClaudeAiOauth;
+    }
+
+    private static string? ReadKeychain()
+    {
+        using var process = Process.Start(new ProcessStartInfo
+        {
+            FileName = "/usr/bin/security",
+            Arguments = $"find-generic-password -s \"{KeychainServiceName}\" -w",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        });
+
+        if (process == null)
+            return null;
+
+        var output = process.StandardOutput.ReadToEnd().Trim();
+        process.WaitForExit();
+
+        return process.ExitCode == 0 && output.Length > 0 ? output : null;
+    }
+
+    private static void WriteKeychain(string json)
+    {
+        // Delete the existing entry first (security add fails if it already exists)
+        using var delete = Process.Start(new ProcessStartInfo
+        {
+            FileName = "/usr/bin/security",
+            Arguments = $"delete-generic-password -s \"{KeychainServiceName}\"",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        });
+        delete?.WaitForExit();
+
+        using var add = Process.Start(new ProcessStartInfo
+        {
+            FileName = "/usr/bin/security",
+            Arguments = $"add-generic-password -s \"{KeychainServiceName}\" -a \"{Environment.UserName}\" -w \"{json.Replace("\"", "\\\"")}\"",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        });
+
+        if (add == null)
+            return;
+
+        add.WaitForExit();
+        if (add.ExitCode != 0)
+        {
+            var error = add.StandardError.ReadToEnd();
+            throw new InvalidOperationException($"Failed to write credentials to Keychain: {error}");
+        }
     }
 
     private async Task RefreshTokenAsync()
@@ -164,6 +252,10 @@ public class UsageService : IDisposable
             ClaudeAiOauth = _credentials
         };
         var updatedJson = JsonSerializer.Serialize(credFile, UsageJsonContext.Default.CredentialsFile);
-        await File.WriteAllTextAsync(CredentialsPath, updatedJson);
+
+        if (IsMacOS)
+            WriteKeychain(updatedJson);
+        else
+            await File.WriteAllTextAsync(CredentialsPath, updatedJson);
     }
 }

@@ -10,7 +10,7 @@ public partial class NoCredentialsWindow : Window
     public NoCredentialsWindow()
     {
         InitializeComponent();
-        CredentialsPathRun.Text = UsageService.CredentialsFilePath;
+        CredentialsPathRun.Text = UsageService.CredentialsLocation;
     }
 
     private void OnCloseClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)

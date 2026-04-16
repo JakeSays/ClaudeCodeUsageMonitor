@@ -19,7 +19,7 @@ public class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            if (!UsageService.CredentialsFileExists())
+            if (!UsageService.CredentialsExist())
             {
                 var icons = TrayIcon.GetIcons(this);
                 if (icons != null)
