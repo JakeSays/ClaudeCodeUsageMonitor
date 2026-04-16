@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Net.Http;
@@ -35,12 +34,13 @@ public class UsageService : IDisposable
     public static bool CredentialsExist()
     {
         if (!IsMacOS)
+        {
             return File.Exists(CredentialsPath);
+        }
 
         try
         {
-            var json = ReadKeychain();
-            return json != null;
+            return MacKeychain.Read(KeychainServiceName) != null;
         }
         catch
         {
@@ -131,77 +131,25 @@ public class UsageService : IDisposable
 
         if (IsMacOS)
         {
-            json = ReadKeychain();
+            json = MacKeychain.Read(KeychainServiceName);
             if (json == null)
+            {
                 throw new InvalidOperationException(
                     $"No credentials found in macOS Keychain (service: \"{KeychainServiceName}\")");
+            }
         }
         else
         {
             if (!File.Exists(CredentialsPath))
+            {
                 throw new FileNotFoundException($"No credentials file found at {CredentialsPath}");
+            }
 
             json = await File.ReadAllTextAsync(CredentialsPath);
         }
 
         var credFile = JsonSerializer.Deserialize(json, UsageJsonContext.Default.CredentialsFile);
         _credentials = credFile?.ClaudeAiOauth;
-    }
-
-    private static string? ReadKeychain()
-    {
-        using var process = Process.Start(new ProcessStartInfo
-        {
-            FileName = "/usr/bin/security",
-            Arguments = $"find-generic-password -s \"{KeychainServiceName}\" -w",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        });
-
-        if (process == null)
-            return null;
-
-        var output = process.StandardOutput.ReadToEnd().Trim();
-        process.WaitForExit();
-
-        return process.ExitCode == 0 && output.Length > 0 ? output : null;
-    }
-
-    private static void WriteKeychain(string json)
-    {
-        // Delete the existing entry first (security add fails if it already exists)
-        using var delete = Process.Start(new ProcessStartInfo
-        {
-            FileName = "/usr/bin/security",
-            Arguments = $"delete-generic-password -s \"{KeychainServiceName}\"",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        });
-        delete?.WaitForExit();
-
-        using var add = Process.Start(new ProcessStartInfo
-        {
-            FileName = "/usr/bin/security",
-            Arguments = $"add-generic-password -s \"{KeychainServiceName}\" -a \"{Environment.UserName}\" -w \"{json.Replace("\"", "\\\"")}\"",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        });
-
-        if (add == null)
-            return;
-
-        add.WaitForExit();
-        if (add.ExitCode != 0)
-        {
-            var error = add.StandardError.ReadToEnd();
-            throw new InvalidOperationException($"Failed to write credentials to Keychain: {error}");
-        }
     }
 
     private async Task RefreshTokenAsync()
@@ -254,8 +202,12 @@ public class UsageService : IDisposable
         var updatedJson = JsonSerializer.Serialize(credFile, UsageJsonContext.Default.CredentialsFile);
 
         if (IsMacOS)
-            WriteKeychain(updatedJson);
+        {
+            MacKeychain.Write(KeychainServiceName, Environment.UserName, updatedJson);
+        }
         else
+        {
             await File.WriteAllTextAsync(CredentialsPath, updatedJson);
+        }
     }
 }
