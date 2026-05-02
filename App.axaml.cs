@@ -88,6 +88,64 @@ public class App : Application
         }
     }
 
+    private void OnChartsMenuClicked(object? sender, EventArgs e) => ShowChartsWindow();
+
+    private async void OnSettingsMenuClicked(object? sender, EventArgs e) =>
+        await ShowSettingsWindow();
+
+    public void ShowChartsWindow()
+    {
+        if (ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop)
+        {
+            return;
+        }
+
+        var database = desktop.MainWindow is MainWindow main
+            ? main.Database
+            : new UsageDatabase();
+
+        var window = new ChartsWindow(database);
+        window.Show();
+    }
+
+    public async System.Threading.Tasks.Task ShowSettingsWindow()
+    {
+        if (ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop)
+        {
+            return;
+        }
+
+        var dialog = new SettingsWindow(Settings);
+        var owner = desktop.MainWindow;
+        if (owner != null && owner.IsVisible)
+        {
+            await dialog.ShowDialog(owner);
+        }
+        else
+        {
+            dialog.Show();
+            var tcs = new System.Threading.Tasks.TaskCompletionSource();
+            dialog.Closed += (_, _) => tcs.TrySetResult();
+            await tcs.Task;
+        }
+
+        if (!dialog.Saved)
+        {
+            return;
+        }
+
+        var minimizeMenu = FindMinimizeMenuItem();
+        if (minimizeMenu != null)
+        {
+            minimizeMenu.IsChecked = Settings.MinimizeToTray;
+        }
+
+        if (desktop.MainWindow is MainWindow main)
+        {
+            main.OnSettingsChanged();
+        }
+    }
+
     private void ShowMainWindow()
     {
         if (ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop)

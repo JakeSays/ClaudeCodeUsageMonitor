@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -18,8 +16,12 @@ public partial class MainWindow : Window
     private static readonly double[] NotifyThresholds = [70, 80, 90];
 
     private readonly UsageService _usageService = new();
+    private readonly UsageLogger _logger = new();
+    private readonly UsageDatabase _database = new();
     private readonly Dictionary<string, double> _previousValues = new();
     private DispatcherTimer? _timer;
+
+    public UsageDatabase Database => _database;
 
     public MainWindow()
     {
@@ -27,6 +29,7 @@ public partial class MainWindow : Window
         Opened += OnOpened;
         Closing += OnClosing;
         PropertyChanged += OnPropertyChanged;
+        ApplySettings();
     }
 
     private bool _handlingMinimize;
@@ -77,34 +80,90 @@ public partial class MainWindow : Window
         _timer.Start();
     }
 
+    public void OnSettingsChanged() => ApplySettings();
+
+    private void OnChartsContextMenuClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (Application.Current is App app)
+        {
+            app.ShowChartsWindow();
+        }
+    }
+
+    private void OnSettingsContextMenuClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (Application.Current is App app)
+        {
+            _ = app.ShowSettingsWindow();
+        }
+    }
+
+    private const double GaugeColumnWidth = 295;
+    private const double WindowChromeWidth = 40;
+
+    private void ApplySettings()
+    {
+        if (Application.Current is not App app)
+        {
+            return;
+        }
+
+        var settings = app.Settings;
+
+        Gauge5Hour.IsVisible = settings.ShowFiveHourGauge;
+        GaugeWeekly.IsVisible = settings.ShowWeeklyGauge;
+        GaugeOpus.IsVisible = settings.ShowOpusGauge;
+        GaugeSonnet.IsVisible = settings.ShowSonnetGauge;
+
+        var visibleCount =
+            (settings.ShowFiveHourGauge ? 1 : 0) +
+            (settings.ShowWeeklyGauge ? 1 : 0) +
+            (settings.ShowOpusGauge ? 1 : 0) +
+            (settings.ShowSonnetGauge ? 1 : 0);
+        var columns = Math.Max(1, visibleCount);
+        GaugeGrid.Columns = columns;
+        Width = columns * GaugeColumnWidth + WindowChromeWidth;
+
+        _logger.Enabled = settings.LoggingEnabled;
+        _logger.LogOutputDirectory = settings.EffectiveLogDirectory;
+    }
+
     private async Task PollUsageAsync()
     {
+        UsageResponse? usage = null;
+        string? errorMessage = null;
+
         try
         {
             StatusText.Text = $"{DateTime.Now:g}";
-            var usage = await _usageService.GetUsageAsync();
+            usage = await _usageService.GetUsageAsync();
 
             if (usage == null)
             {
-                SetError("No usage data received");
+                errorMessage = "No usage data received";
+                SetError(errorMessage);
                 return;
             }
 
             UpdateGauge(Gauge5Hour, usage.FiveHour);
             UpdateGauge(GaugeWeekly, usage.SevenDay);
+            UpdateGauge(GaugeOpus, usage.SevenDayOpus);
             UpdateGauge(GaugeSonnet, usage.SevenDaySonnet);
 
             CheckThresholdCrossing("5-Hour", Gauge5Hour.Value);
             CheckThresholdCrossing("Weekly", GaugeWeekly.Value);
+            CheckThresholdCrossing("Opus", GaugeOpus.Value);
             CheckThresholdCrossing("Sonnet", GaugeSonnet.Value);
 
             UpdateTrayTooltip();
             StatusText.Text = $"{DateTime.Now:g}";
+            ErrorMessageText.Text = "";
         }
         catch (RateLimitedException ex)
         {
             var retryAt = DateTime.Now + ex.RetryAfter;
-            SetError($"Rate exceeded. Retrying at {retryAt:t}");
+            errorMessage = $"Rate exceeded. Retrying at {retryAt:t}";
+            SetError(errorMessage);
             if (_timer != null && ex.RetryAfter > _timer.Interval)
             {
                 _timer.Interval = ex.RetryAfter;
@@ -112,7 +171,13 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            SetError(ex.Message);
+            errorMessage = ex.Message;
+            SetError(errorMessage);
+        }
+        finally
+        {
+            _logger.LogUpdate(usage, errorMessage);
+            _database.Insert(usage, errorMessage);
         }
     }
 
@@ -175,14 +240,15 @@ public partial class MainWindow : Window
         }
 
         icons[0].ToolTipText =
-            $"5-Hour: {Gauge5Hour.Value:F0}%  Weekly: {GaugeWeekly.Value:F0}%  Sonnet: {GaugeSonnet.Value:F0}%";
+            $"5-Hour: {Gauge5Hour.Value:F0}%  Weekly: {GaugeWeekly.Value:F0}%  Opus: {GaugeOpus.Value:F0}%  Sonnet: {GaugeSonnet.Value:F0}%";
     }
 
     private void SetError(string message)
     {
-        StatusText.Text = $"Error: {message}";
+        ErrorMessageText.Text = message;
         Gauge5Hour.ErrorText = "Error";
         GaugeWeekly.ErrorText = "Error";
+        GaugeOpus.ErrorText = "Error";
         GaugeSonnet.ErrorText = "Error";
     }
 }

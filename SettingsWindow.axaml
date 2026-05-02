@@ -1,0 +1,83 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="520" d:DesignHeight="420"
+        x:Class="ClaudeUsageMonitor.SettingsWindow"
+        Title="Settings"
+        Icon="avares://ClaudeUsageMonitor/Assets/icon.ico"
+        Width="520" Height="440"
+        Background="#1a1a2e"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner">
+
+    <Window.Styles>
+        <Style Selector="TextBlock.section">
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="#e0e0f0" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+        </Style>
+        <Style Selector="CheckBox">
+            <Setter Property="Foreground" Value="#b0b0c0" />
+            <Setter Property="Margin" Value="0,2" />
+        </Style>
+        <Style Selector="TextBlock.label">
+            <Setter Property="Foreground" Value="#b0b0c0" />
+            <Setter Property="Margin" Value="0,0,0,4" />
+        </Style>
+    </Window.Styles>
+
+    <Grid RowDefinitions="*,Auto" Margin="20">
+        <StackPanel Grid.Row="0" Spacing="16">
+
+            <StackPanel>
+                <TextBlock Classes="section" Text="Visible Gauges" />
+                <CheckBox x:Name="ShowFiveHourCheck" Content="5-Hour Window" />
+                <CheckBox x:Name="ShowWeeklyCheck" Content="Weekly" />
+                <CheckBox x:Name="ShowOpusCheck" Content="Opus Weekly" />
+                <CheckBox x:Name="ShowSonnetCheck" Content="Sonnet Weekly" />
+            </StackPanel>
+
+            <StackPanel>
+                <TextBlock Classes="section" Text="Logging" />
+                <CheckBox x:Name="LoggingEnabledCheck" Content="Enable logging" />
+                <TextBlock Classes="label" Text="Log directory:" Margin="0,8,0,4" />
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBox Grid.Column="0"
+                             x:Name="LogDirectoryBox" />
+                    <Button Grid.Column="1"
+                            Content="Browse..."
+                            Margin="8,0,0,0"
+                            Padding="14,6"
+                            Click="OnBrowseClicked" />
+                </Grid>
+                <TextBlock Foreground="#80808a"
+                           FontSize="11"
+                           TextWrapping="Wrap"
+                           Margin="0,6,0,0"
+                           Text="One row per update, tab-delimited. Files roll daily as usage-YYYY-MM-DD.tsv." />
+            </StackPanel>
+
+            <StackPanel>
+                <TextBlock Classes="section" Text="Behavior" />
+                <CheckBox x:Name="MinimizeToTrayCheck" Content="Minimize to tray" />
+            </StackPanel>
+
+        </StackPanel>
+
+        <StackPanel Grid.Row="1"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Spacing="8"
+                    Margin="0,16,0,0">
+            <Button Content="Cancel"
+                    Padding="20,6"
+                    Click="OnCancelClicked" />
+            <Button Content="OK"
+                    Padding="20,6"
+                    IsDefault="True"
+                    Click="OnOkClicked" />
+        </StackPanel>
+    </Grid>
+</Window>

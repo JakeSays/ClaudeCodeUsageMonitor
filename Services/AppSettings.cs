@@ -10,6 +10,22 @@ public class AppSettings
 {
     public bool MinimizeToTray { get; set; }
 
+    public bool ShowFiveHourGauge { get; set; } = true;
+    public bool ShowWeeklyGauge { get; set; } = true;
+    public bool ShowOpusGauge { get; set; } = true;
+    public bool ShowSonnetGauge { get; set; } = true;
+
+    public bool LoggingEnabled { get; set; }
+    public string? LogDirectory { get; set; }
+
+    public static string DefaultLogDirectory => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+        ".claude",
+        "usage-logs");
+
+    public string EffectiveLogDirectory =>
+        string.IsNullOrWhiteSpace(LogDirectory) ? DefaultLogDirectory : LogDirectory;
+
     private static readonly string SettingsPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         ".claude",

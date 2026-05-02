@@ -1,0 +1,79 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:scottplot="clr-namespace:ScottPlot.Avalonia;assembly=ScottPlot.Avalonia"
+        mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="700"
+        x:Class="ClaudeUsageMonitor.ChartsWindow"
+        Title="Claude Usage Charts"
+        Icon="avares://ClaudeUsageMonitor/Assets/icon.ico"
+        Width="1100" Height="700"
+        Background="#1a1a2e">
+
+    <Window.Styles>
+        <Style Selector="TabItem">
+            <Setter Property="Foreground" Value="#b0b0c0" />
+            <Setter Property="FontSize" Value="13" />
+        </Style>
+    </Window.Styles>
+
+    <Grid RowDefinitions="*,Auto">
+        <TabControl Grid.Row="0" x:Name="ChartsTabs" Margin="6">
+            <TabItem Header="Burn Rate Forecast">
+                <scottplot:AvaPlot x:Name="BurnRatePlot" />
+            </TabItem>
+            <TabItem Header="Hour-of-Day">
+                <scottplot:AvaPlot x:Name="HourOfDayPlot" />
+            </TabItem>
+            <TabItem Header="Cycle Overlay">
+                <scottplot:AvaPlot x:Name="CycleOverlayPlot" />
+            </TabItem>
+            <TabItem Header="Sonnet vs Opus">
+                <scottplot:AvaPlot x:Name="SonnetOpusPlot" />
+            </TabItem>
+            <TabItem Header="Reset Waterfall">
+                <scottplot:AvaPlot x:Name="WaterfallPlot" />
+            </TabItem>
+            <TabItem Header="Burst Detector">
+                <scottplot:AvaPlot x:Name="BurstPlot" />
+            </TabItem>
+            <TabItem Header="Extra Credits">
+                <Grid RowDefinitions="Auto,*">
+                    <StackPanel Grid.Row="0" Margin="20,16,20,8">
+                        <TextBlock x:Name="ExtraCreditsHeader"
+                                   Text="Extra Credits"
+                                   FontSize="16" FontWeight="Bold"
+                                   Foreground="#e0e0f0" />
+                        <TextBlock x:Name="ExtraCreditsAmount"
+                                   Foreground="#b0b0c0"
+                                   FontSize="13"
+                                   Margin="0,4,0,4" />
+                        <ProgressBar x:Name="ExtraCreditsProgressBar"
+                                     Height="16"
+                                     Minimum="0" Maximum="100"
+                                     Background="#22223a"
+                                     Foreground="#9b59b6" />
+                        <TextBlock x:Name="ExtraCreditsForecast"
+                                   Foreground="#80808a"
+                                   FontSize="11"
+                                   Margin="0,8,0,0"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                    <scottplot:AvaPlot Grid.Row="1" x:Name="ExtraCreditsPlot" />
+                </Grid>
+            </TabItem>
+        </TabControl>
+
+        <StackPanel Grid.Row="1"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="10,0,10,10"
+                    Spacing="8">
+            <TextBlock x:Name="StatusText"
+                       Foreground="#80808a"
+                       FontSize="11"
+                       VerticalAlignment="Center" />
+            <Button Content="Refresh" Click="OnRefreshClicked" Padding="14,6" />
+        </StackPanel>
+    </Grid>
+</Window>

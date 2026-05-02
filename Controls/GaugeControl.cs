@@ -56,6 +56,10 @@ public class GaugeControl : Control
 
         var bounds = Bounds;
         var size = Math.Min(bounds.Width, bounds.Height);
+        if (size <= 0)
+        {
+            return;
+        }
         var centerX = bounds.Width / 2;
         var centerY = bounds.Height / 2 - 10;
         var radius = size * 0.38;

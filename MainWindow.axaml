@@ -3,15 +3,22 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:controls="using:ClaudeUsageMonitor.Controls"
-        mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="380"
+        mc:Ignorable="d" d:DesignWidth="1180" d:DesignHeight="380"
         x:Class="ClaudeUsageMonitor.MainWindow"
         Title="Claude Code Usage Monitor"
         Icon="avares://ClaudeUsageMonitor/Assets/icon.ico"
-        Width="900" Height="420"
+        Width="1180" Height="420"
         Background="#1a1a2e"
         CanResize="False">
 
-    <Grid RowDefinitions="Auto,*">
+    <Window.ContextMenu>
+        <ContextMenu>
+            <MenuItem Header="Charts..." Click="OnChartsContextMenuClicked" />
+            <MenuItem Header="Settings..." Click="OnSettingsContextMenuClicked" />
+        </ContextMenu>
+    </Window.ContextMenu>
+
+    <Grid RowDefinitions="Auto,Auto,*">
         <!-- Header -->
         <Grid Grid.Row="0" Margin="20,16,20,0">
             <TextBlock Text="Claude Code Usage"
@@ -26,13 +33,29 @@
                        VerticalAlignment="Center" />
         </Grid>
 
+        <!-- Error message -->
+        <TextBlock Grid.Row="1"
+                   x:Name="ErrorMessageText"
+                   Text=""
+                   FontSize="12"
+                   Foreground="#f5d76e"
+                   HorizontalAlignment="Left"
+                   TextWrapping="Wrap"
+                   Margin="20,4,20,0" />
+
         <!-- Gauges -->
-        <UniformGrid Grid.Row="1" Columns="3" Margin="20,0">
+        <UniformGrid Grid.Row="2"
+                     x:Name="GaugeGrid"
+                     Columns="4"
+                     Margin="20,0,20,15">
             <controls:GaugeControl x:Name="Gauge5Hour"
                                    Label="5-Hour Window"
                                    Value="0" />
             <controls:GaugeControl x:Name="GaugeWeekly"
                                    Label="Weekly"
+                                   Value="0" />
+            <controls:GaugeControl x:Name="GaugeOpus"
+                                   Label="Opus Weekly"
                                    Value="0" />
             <controls:GaugeControl x:Name="GaugeSonnet"
                                    Label="Sonnet Weekly"
