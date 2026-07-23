@@ -22,20 +22,20 @@
             <TabItem Header="Burn Rate Forecast">
                 <scottplot:AvaPlot x:Name="BurnRatePlot" />
             </TabItem>
-            <TabItem Header="Hour-of-Day">
-                <scottplot:AvaPlot x:Name="HourOfDayPlot" />
+            <TabItem Header="Daily Usage">
+                <scottplot:AvaPlot x:Name="DailyUsagePlot" />
             </TabItem>
-            <TabItem Header="Cycle Overlay">
-                <scottplot:AvaPlot x:Name="CycleOverlayPlot" />
+            <TabItem Header="Weekly Usage">
+                <scottplot:AvaPlot x:Name="WeeklyUsagePlot" />
             </TabItem>
-            <TabItem Header="Sonnet vs Opus">
-                <scottplot:AvaPlot x:Name="SonnetOpusPlot" />
+            <TabItem Header="Usage History">
+                <scottplot:AvaPlot x:Name="UsageHistoryPlot" />
             </TabItem>
             <TabItem Header="Reset Waterfall">
                 <scottplot:AvaPlot x:Name="WaterfallPlot" />
             </TabItem>
-            <TabItem Header="Burst Detector">
-                <scottplot:AvaPlot x:Name="BurstPlot" />
+            <TabItem Header="5-Hour Window">
+                <scottplot:AvaPlot x:Name="FiveHourPlot" />
             </TabItem>
             <TabItem Header="Extra Credits">
                 <Grid RowDefinitions="Auto,*">

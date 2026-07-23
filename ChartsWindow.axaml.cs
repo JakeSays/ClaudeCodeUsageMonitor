@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using ClaudeUsageMonitor.Services;
 using ScottPlot;
+using ScottPlot.Avalonia;
 
 
 namespace ClaudeUsageMonitor;
@@ -13,33 +15,110 @@ public partial class ChartsWindow : Window
 {
     private readonly UsageDatabase _database;
 
-    public ChartsWindow() : this(new UsageDatabase())
+    public ChartsWindow()
+        : this(new UsageDatabase())
     {
     }
+
+    private List<UsageSample> _samples = [];
+    private readonly HashSet<int> _builtTabs = [];
+    private bool _samplesLoaded;
 
     public ChartsWindow(UsageDatabase database)
     {
         _database = database;
         InitializeComponent();
-        Opened += (_, _) => RefreshAll();
+
+        // Index matches tab order.
+        _plots =
+        [
+            BurnRatePlot,
+            DailyUsagePlot,
+            WeeklyUsagePlot,
+            UsageHistoryPlot,
+            WaterfallPlot,
+            FiveHourPlot,
+            ExtraCreditsPlot
+        ];
+
+        // An unbuilt plot paints as an empty default chart, so keep each one
+        // hidden until it holds real data rather than showing it get redrawn.
+        foreach (var control in _plots)
+        {
+            StyleDarkPlot(control.Plot);
+            control.IsVisible = false;
+        }
+
+        ChartsTabs.SelectionChanged += (_, _) => BuildSelectedTab();
+        Opened += (_, _) => _ = RefreshAllAsync();
     }
 
-    private void OnRefreshClicked(object? sender, RoutedEventArgs e) => RefreshAll();
+    private readonly AvaPlot[] _plots;
 
-    private void RefreshAll()
+    private void OnRefreshClicked(object? sender, RoutedEventArgs e) => _ = RefreshAllAsync();
+
+    // Reading and parsing the whole table takes long enough to be visible, so it
+    // runs off the UI thread and only the tab in view gets built; the rest are
+    // built the first time they are selected.
+    private async Task RefreshAllAsync()
     {
         try
         {
-            var samples = _database.GetAll();
-            StatusText.Text = $"{samples.Count} samples";
+            StatusText.Text = "Loading...";
+            _samples = await Task.Run(_database.GetAll);
+            _samplesLoaded = true;
+            StatusText.Text = $"{_samples.Count} samples";
 
-            BuildBurnRateForecast(samples);
-            BuildHourOfDay(samples);
-            BuildCycleOverlay(samples);
-            BuildSonnetOpus(samples);
-            BuildWaterfall(samples);
-            BuildBurst(samples);
-            BuildExtraCredits(samples);
+            _builtTabs.Clear();
+            BuildSelectedTab();
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = $"Error: {ex.Message}";
+        }
+    }
+
+    private void BuildSelectedTab()
+    {
+        if (!_samplesLoaded)
+        {
+            return;
+        }
+
+        var index = ChartsTabs.SelectedIndex;
+        if (index < 0 || !_builtTabs.Add(index))
+        {
+            return;
+        }
+
+        try
+        {
+            switch (index)
+            {
+                case 0:
+                    BuildBurnRateForecast(_samples);
+                    break;
+                case 1:
+                    BuildDailyUsage(_samples);
+                    break;
+                case 2:
+                    BuildWeeklyUsage(_samples);
+                    break;
+                case 3:
+                    BuildUsageHistory(_samples);
+                    break;
+                case 4:
+                    BuildWaterfall(_samples);
+                    break;
+                case 5:
+                    BuildFiveHourWindow(_samples);
+                    break;
+                case 6:
+                    BuildExtraCredits(_samples);
+                    break;
+            }
+
+            _plots[index].IsVisible = true;
         }
         catch (Exception ex)
         {
@@ -128,166 +207,156 @@ public partial class ChartsWindow : Window
         BurnRatePlot.Refresh();
     }
 
-    // ---- Chart 2: Hour-of-Day Heatmap ----
-    // For each hour of day, average the rate-of-change of 5-hour utilization
-    // (per minute). Bar chart 0..23.
-    private void BuildHourOfDay(List<UsageSample> samples)
+    // ---- Chart 2: Daily Usage ----
+    // Bar chart of weekly utilization % consumed per calendar day.
+    // Within each cycle, the gain per day = max util that day - max util previous day.
+    private void BuildDailyUsage(List<UsageSample> samples)
     {
-        var plot = HourOfDayPlot.Plot;
+        var plot = DailyUsagePlot.Plot;
         plot.Clear();
         StyleDarkPlot(plot);
-        plot.Title("Avg 5-hour utilization growth by hour of day");
-        plot.XLabel("Hour of day (local)");
-        plot.YLabel("Δ util / minute");
+        plot.Title("Weekly utilization consumed per day");
+        plot.XLabel("Date");
+        plot.YLabel("Utilization % gained");
 
-        // Per-hour accumulators: sum-of-rates and count
-        var sums = new double[24];
-        var counts = new int[24];
-
-        for (var i = 1; i < samples.Count; i++)
-        {
-            var prev = samples[i - 1];
-            var curr = samples[i];
-            if (prev.FiveHourUtilization is not { } pu || curr.FiveHourUtilization is not { } cu)
-            {
-                continue;
-            }
-            // Reset event (or different cycle): util drops or resets_at changes
-            if (cu < pu - 5 || prev.FiveHourResetsAt != curr.FiveHourResetsAt)
-            {
-                continue;
-            }
-            var dtMinutes = (curr.Timestamp - prev.Timestamp).TotalMinutes;
-            if (dtMinutes <= 0 || dtMinutes > 30)
-            {
-                continue;
-            }
-            var rate = (cu - pu) / dtMinutes;
-            var hour = curr.Timestamp.LocalDateTime.Hour;
-            sums[hour] += rate;
-            counts[hour]++;
-        }
-
-        var avgs = new double[24];
-        for (var h = 0; h < 24; h++)
-        {
-            avgs[h] = counts[h] > 0 ? sums[h] / counts[h] : 0;
-        }
-
-        var bars = plot.Add.Bars(Enumerable.Range(0, 24).Select(h => (double) h).ToArray(), avgs);
-        bars.Color = Colors.MediumPurple;
-
-        plot.Axes.SetLimits(-0.5, 23.5, 0, avgs.DefaultIfEmpty(1).Max() * 1.15);
-        HourOfDayPlot.Refresh();
-    }
-
-    // ---- Chart 3: Cycle Overlay ----
-    // Plot weekly utilization vs hours-since-reset, one line per completed
-    // weekly cycle, plus the in-progress cycle highlighted.
-    private void BuildCycleOverlay(List<UsageSample> samples)
-    {
-        var plot = CycleOverlayPlot.Plot;
-        plot.Clear();
-        StyleDarkPlot(plot);
-        plot.Title("Weekly cycles overlay (anchored at reset)");
-        plot.XLabel("Hours since cycle start");
-        plot.YLabel("Utilization %");
-
-        var byReset = samples
+        var cycleGroups = samples
             .Where(s => s.WeeklyUtilization != null && s.WeeklyResetsAt != null)
-            .GroupBy(s => s.WeeklyResetsAt!.Value)
-            .OrderBy(g => g.Key)
-            .ToList();
+            .GroupBy(s => s.WeeklyResetsAt!.Value.Date)
+            .OrderBy(g => g.Key);
 
-        if (byReset.Count == 0)
+        var dailyGains = new List<(DateTime Date, double Gain)>();
+        foreach (var cycle in cycleGroups)
+        {
+            var byDay = cycle
+                .GroupBy(s => s.Timestamp.LocalDateTime.Date)
+                .OrderBy(g => g.Key)
+                .ToList();
+            var prevMax = 0.0;
+            foreach (var dayGroup in byDay)
+            {
+                var dayMax = dayGroup.Max(s => s.WeeklyUtilization!.Value);
+                dailyGains.Add((dayGroup.Key, Math.Max(0, dayMax - prevMax)));
+                prevMax = dayMax;
+            }
+        }
+
+        if (dailyGains.Count == 0)
         {
             plot.Add.Annotation("No data yet.", Alignment.MiddleCenter);
-            CycleOverlayPlot.Refresh();
+            DailyUsagePlot.Refresh();
             return;
         }
 
-        var nowResetGroup = byReset[^1];
-        var palette = new ScottPlot.Palettes.Category10();
-
-        for (var i = 0; i < byReset.Count; i++)
+        var bars = new List<Bar>();
+        var positions = new List<double>();
+        var labels = new List<string>();
+        for (var i = 0; i < dailyGains.Count; i++)
         {
-            var group = byReset[i].OrderBy(s => s.Timestamp).ToList();
-            // The cycle started 7 days before reset
-            var cycleStart = byReset[i].Key - TimeSpan.FromDays(7);
-            var hoursSince = group.Select(s => (s.Timestamp - cycleStart).TotalHours).ToArray();
-            var utilizations = group.Select(s => s.WeeklyUtilization ?? 0).ToArray();
-
-            var line = plot.Add.Scatter(hoursSince, utilizations);
-            line.MarkerSize = 0;
-            var isCurrent = ReferenceEquals(byReset[i], nowResetGroup);
-            line.LineWidth = isCurrent ? 3 : 1;
-            line.Color = isCurrent
-                ? Colors.OrangeRed
-                : palette.GetColor(i % 10).WithAlpha(0.55);
-            line.LegendText = isCurrent
-                ? $"Current (resets {byReset[i].Key.LocalDateTime:M/d})"
-                : $"Cycle {byReset[i].Key.LocalDateTime:M/d}";
+            bars.Add(new Bar { Position = i, Value = dailyGains[i].Gain, FillColor = Colors.SteelBlue });
+            positions.Add(i);
+            labels.Add(dailyGains[i].Date.ToString("M/d"));
         }
-
-        plot.Add.HorizontalLine(100, color: Colors.Red.WithAlpha(0.4));
-        plot.Axes.SetLimits(0, 168, 0, 110);
-        plot.ShowLegend();
-        CycleOverlayPlot.Refresh();
+        plot.Add.Bars(bars);
+        plot.Axes.Bottom.TickGenerator = new ScottPlot.TickGenerators.NumericManual(
+            positions.ToArray(), labels.ToArray());
+        var maxGain = dailyGains.Max(d => d.Gain);
+        plot.Axes.SetLimits(-0.5, dailyGains.Count - 0.5, 0, Math.Max(maxGain * 1.15, 5));
+        DailyUsagePlot.Refresh();
     }
 
-    // ---- Chart 4: Sonnet vs Opus split ----
-    // Within the current weekly cycle, plot sonnet and opus utilization as
-    // separate lines. Also draws total weekly for reference.
-    private void BuildSonnetOpus(List<UsageSample> samples)
+    // ---- Chart 3: Usage History ----
+    // Weekly utilization as a continuous line over all recorded time,
+    // with dotted vertical markers at each cycle reset.
+    private void BuildUsageHistory(List<UsageSample> samples)
     {
-        var plot = SonnetOpusPlot.Plot;
+        var plot = UsageHistoryPlot.Plot;
         plot.Clear();
         StyleDarkPlot(plot);
-        plot.Title("Sonnet vs Opus utilization (current cycle)");
+        plot.Title("Weekly utilization over time");
         plot.XLabel("Time");
         plot.YLabel("Utilization %");
 
-        var current = CurrentCycleSamples(samples);
+        var withWeekly = samples
+            .Where(s => s.WeeklyUtilization != null)
+            .OrderBy(s => s.Timestamp)
+            .ToList();
+
+        if (withWeekly.Count == 0)
+        {
+            plot.Add.Annotation("No data yet.", Alignment.MiddleCenter);
+            UsageHistoryPlot.Refresh();
+            return;
+        }
+
+        var xs = withWeekly.Select(s => s.Timestamp.LocalDateTime.ToOADate()).ToArray();
+        var ys = withWeekly.Select(s => s.WeeklyUtilization!.Value).ToArray();
+
+        var line = plot.Add.Scatter(xs, ys);
+        line.MarkerSize = 0;
+        line.Color = Colors.SkyBlue;
+        line.LineWidth = 2;
+
+        var pastResets = withWeekly
+            .Where(s => s.WeeklyResetsAt != null && s.WeeklyResetsAt < DateTimeOffset.Now)
+            .Select(s => s.WeeklyResetsAt!.Value.Date)
+            .Distinct()
+            .OrderBy(d => d);
+
+        foreach (var resetDate in pastResets)
+        {
+            var vl = plot.Add.VerticalLine(resetDate.ToOADate());
+            vl.Color = Colors.Red.WithAlpha(0.35);
+            vl.LineStyle.Pattern = LinePattern.Dotted;
+        }
+
+        plot.Add.HorizontalLine(100, color: Colors.Red.WithAlpha(0.4));
+        UseDateTimeBottomAxis(plot);
+        UsageHistoryPlot.Refresh();
+    }
+
+    // ---- Chart 4: Weekly Usage ----
+    // Weekly utilization across the current cycle, with the reset marked.
+    private void BuildWeeklyUsage(List<UsageSample> samples)
+    {
+        var plot = WeeklyUsagePlot.Plot;
+        plot.Clear();
+        StyleDarkPlot(plot);
+        plot.Title("Weekly utilization (current cycle)");
+        plot.XLabel("Time");
+        plot.YLabel("Utilization %");
+
+        var current = CurrentCycleSamples(samples)
+            .Where(s => s.WeeklyUtilization != null)
+            .ToList();
+
         if (current.Count == 0)
         {
             plot.Add.Annotation("No data in current cycle yet.", Alignment.MiddleCenter);
-            SonnetOpusPlot.Refresh();
+            WeeklyUsagePlot.Refresh();
             return;
         }
 
         var xs = current.Select(s => s.Timestamp.LocalDateTime.ToOADate()).ToArray();
+        var ys = current.Select(s => s.WeeklyUtilization!.Value).ToArray();
 
-        if (current.Any(s => s.WeeklyUtilization != null))
+        var line = plot.Add.Scatter(xs, ys);
+        line.MarkerSize = 0;
+        line.Color = Colors.SkyBlue;
+        line.LineWidth = 2;
+
+        var resetsAt = current[^1].WeeklyResetsAt;
+        if (resetsAt != null)
         {
-            var ys = current.Select(s => s.WeeklyUtilization ?? 0).ToArray();
-            var line = plot.Add.Scatter(xs, ys);
-            line.LegendText = "Total weekly";
-            line.MarkerSize = 0;
-            line.Color = Colors.LightGray;
-            line.LineWidth = 1.5f;
-        }
-        if (current.Any(s => s.OpusUtilization != null))
-        {
-            var ys = current.Select(s => s.OpusUtilization ?? 0).ToArray();
-            var line = plot.Add.Scatter(xs, ys);
-            line.LegendText = "Opus";
-            line.MarkerSize = 0;
-            line.Color = Colors.OrangeRed;
-            line.LineWidth = 2;
-        }
-        if (current.Any(s => s.SonnetUtilization != null))
-        {
-            var ys = current.Select(s => s.SonnetUtilization ?? 0).ToArray();
-            var line = plot.Add.Scatter(xs, ys);
-            line.LegendText = "Sonnet";
-            line.MarkerSize = 0;
-            line.Color = Colors.SteelBlue;
-            line.LineWidth = 2;
+            var resetLine = plot.Add.VerticalLine(resetsAt.Value.LocalDateTime.ToOADate());
+            resetLine.Color = Colors.Red.WithAlpha(0.5);
+            resetLine.LineStyle.Pattern = LinePattern.Dotted;
+            resetLine.LegendText = $"Resets {resetsAt.Value.LocalDateTime:M/d h:mm tt}";
+            plot.ShowLegend();
         }
 
+        plot.Add.HorizontalLine(100, color: Colors.Red.WithAlpha(0.4));
         UseDateTimeBottomAxis(plot);
-        plot.ShowLegend();
-        SonnetOpusPlot.Refresh();
+        WeeklyUsagePlot.Refresh();
     }
 
     // ---- Chart 5: Reset Waterfall ----
@@ -303,25 +372,13 @@ public partial class ChartsWindow : Window
 
         var byReset = samples
             .Where(s => s.WeeklyUtilization != null && s.WeeklyResetsAt != null)
-            .GroupBy(s => s.WeeklyResetsAt!.Value)
+            .GroupBy(s => s.WeeklyResetsAt!.Value.Date)
             .OrderBy(g => g.Key)
             .ToList();
 
         // Drop the most recent (in-progress) cycle from the bar chart, but
         // include it as a translucent bar so it's visible.
-        var values = new List<double>();
-        var positions = new List<double>();
-        var labels = new List<string>();
-
-        for (var i = 0; i < byReset.Count; i++)
-        {
-            var lastSample = byReset[i].OrderBy(s => s.Timestamp).Last();
-            values.Add(lastSample.WeeklyUtilization ?? 0);
-            positions.Add(i);
-            labels.Add(byReset[i].Key.LocalDateTime.ToString("M/d"));
-        }
-
-        if (values.Count == 0)
+        if (byReset.Count == 0)
         {
             plot.Add.Annotation("No completed cycles yet.", Alignment.MiddleCenter);
             WaterfallPlot.Refresh();
@@ -329,110 +386,68 @@ public partial class ChartsWindow : Window
         }
 
         var bars = new List<Bar>();
-        for (var i = 0; i < values.Count; i++)
+        var positions = new List<double>();
+        var labels = new List<string>();
+        for (var i = 0; i < byReset.Count; i++)
         {
-            var isCurrent = i == values.Count - 1;
+            var lastSample = byReset[i].OrderBy(s => s.Timestamp).Last();
+            var value = lastSample.WeeklyUtilization ?? 0;
+            var isCurrent = i == byReset.Count - 1;
             bars.Add(new Bar
             {
-                Position = positions[i],
-                Value = values[i],
+                Position = i,
+                Value = value,
                 FillColor = isCurrent ? Colors.OrangeRed.WithAlpha(0.6) : Colors.MediumPurple,
-                Label = $"{values[i]:F0}%"
+                Label = $"{value:F0}%"
             });
+            positions.Add(i);
+            labels.Add(byReset[i].Key.ToString("M/d"));
         }
         plot.Add.Bars(bars);
 
         plot.Add.HorizontalLine(100, color: Colors.Red.WithAlpha(0.4));
         plot.Axes.Bottom.TickGenerator = new ScottPlot.TickGenerators.NumericManual(
             positions.ToArray(), labels.ToArray());
-        plot.Axes.SetLimits(-0.5, positions[^1] + 0.5, 0, Math.Max(110, values.Max() + 10));
+        var maxValue = bars.Max(b => b.Value);
+        plot.Axes.SetLimits(-0.5, positions[^1] + 0.5, 0, Math.Max(110, maxValue + 10));
         WaterfallPlot.Refresh();
     }
 
-    // ---- Chart 6: Burst Detector ----
-    // 5-hour utilization rate-of-change over time, with a threshold line
-    // marking "burst" sessions.
-    private void BuildBurst(List<UsageSample> samples)
+    // ---- Chart 6: 5-Hour Window ----
+    // Raw 5-hour utilization over all recorded time. The sawtooth shape
+    // reveals when active work happened (steep rises) and when windows reset.
+    private void BuildFiveHourWindow(List<UsageSample> samples)
     {
-        var plot = BurstPlot.Plot;
+        var plot = FiveHourPlot.Plot;
         plot.Clear();
         StyleDarkPlot(plot);
-        plot.Title("5-hour utilization burn rate (Δ%/min)");
+        plot.Title("5-hour window utilization over time");
         plot.XLabel("Time");
-        plot.YLabel("Δ util / minute");
+        plot.YLabel("Utilization %");
 
-        var xs = new List<double>();
-        var ys = new List<double>();
+        var withFiveHour = samples
+            .Where(s => s.FiveHourUtilization != null)
+            .OrderBy(s => s.Timestamp)
+            .ToList();
 
-        for (var i = 1; i < samples.Count; i++)
-        {
-            var prev = samples[i - 1];
-            var curr = samples[i];
-            if (prev.FiveHourUtilization is not { } pu || curr.FiveHourUtilization is not { } cu)
-            {
-                continue;
-            }
-            if (cu < pu - 5 || prev.FiveHourResetsAt != curr.FiveHourResetsAt)
-            {
-                continue;
-            }
-            var dtMinutes = (curr.Timestamp - prev.Timestamp).TotalMinutes;
-            if (dtMinutes <= 0 || dtMinutes > 30)
-            {
-                continue;
-            }
-            var rate = Math.Max(0, (cu - pu) / dtMinutes);
-            xs.Add(curr.Timestamp.LocalDateTime.ToOADate());
-            ys.Add(rate);
-        }
-
-        if (xs.Count == 0)
+        if (withFiveHour.Count == 0)
         {
             plot.Add.Annotation("No data yet.", Alignment.MiddleCenter);
-            BurstPlot.Refresh();
+            FiveHourPlot.Refresh();
             return;
         }
 
-        var line = plot.Add.Scatter(xs.ToArray(), ys.ToArray());
+        var xs = withFiveHour.Select(s => s.Timestamp.LocalDateTime.ToOADate()).ToArray();
+        var ys = withFiveHour.Select(s => s.FiveHourUtilization!.Value).ToArray();
+
+        var line = plot.Add.Scatter(xs, ys);
         line.MarkerSize = 0;
         line.Color = Colors.SkyBlue;
-        line.LineWidth = 1;
+        line.LineWidth = 1.5f;
 
-        // Threshold = 2x the median nonzero rate
-        var nonzero = ys.Where(v => v > 0).OrderBy(v => v).ToList();
-        if (nonzero.Count > 0)
-        {
-            var median = nonzero[nonzero.Count / 2];
-            var threshold = median * 2;
-            var thresholdLine = plot.Add.HorizontalLine(threshold);
-            thresholdLine.Color = Colors.Orange;
-            thresholdLine.LineStyle.Pattern = LinePattern.Dashed;
-            thresholdLine.LegendText = $"Burst threshold ({threshold:F2}/min)";
-
-            // Mark points exceeding threshold
-            var burstXs = new List<double>();
-            var burstYs = new List<double>();
-            for (var i = 0; i < xs.Count; i++)
-            {
-                if (ys[i] >= threshold)
-                {
-                    burstXs.Add(xs[i]);
-                    burstYs.Add(ys[i]);
-                }
-            }
-            if (burstXs.Count > 0)
-            {
-                var marks = plot.Add.Scatter(burstXs.ToArray(), burstYs.ToArray());
-                marks.LineWidth = 0;
-                marks.MarkerSize = 6;
-                marks.Color = Colors.OrangeRed;
-                marks.LegendText = "Bursts";
-            }
-        }
-
+        plot.Add.HorizontalLine(100, color: Colors.Red.WithAlpha(0.4));
         UseDateTimeBottomAxis(plot);
-        plot.ShowLegend();
-        BurstPlot.Refresh();
+        FiveHourPlot.Refresh();
     }
 
     // ---- Chart 7: Extra Credits ----
@@ -563,6 +578,9 @@ public partial class ChartsWindow : Window
 
     // ---- Helpers ----
 
+    // The API's resets_at drifts by a fraction of a second between polls, so a
+    // cycle has to be identified by its reset day — matching the exact value
+    // pairs a sample only with itself.
     private static List<UsageSample> CurrentCycleSamples(List<UsageSample> samples)
     {
         var withReset = samples.Where(s => s.WeeklyResetsAt != null).ToList();
@@ -570,8 +588,8 @@ public partial class ChartsWindow : Window
         {
             return new List<UsageSample>();
         }
-        var latestReset = withReset[^1].WeeklyResetsAt;
-        return withReset.Where(s => s.WeeklyResetsAt == latestReset).ToList();
+        var latestResetDay = withReset[^1].WeeklyResetsAt!.Value.Date;
+        return withReset.Where(s => s.WeeklyResetsAt!.Value.Date == latestResetDay).ToList();
     }
 
     private static (double slope, double intercept) LinearFit(double[] xs, double[] ys)

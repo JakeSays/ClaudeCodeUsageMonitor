@@ -13,7 +13,7 @@ public class AppSettings
     public bool ShowFiveHourGauge { get; set; } = true;
     public bool ShowWeeklyGauge { get; set; } = true;
     public bool ShowOpusGauge { get; set; } = true;
-    public bool ShowSonnetGauge { get; set; } = true;
+    public bool ShowWeeklyLimits { get; set; } = true;
 
     public bool LoggingEnabled { get; set; }
     public string? LogDirectory { get; set; }

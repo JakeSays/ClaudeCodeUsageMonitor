@@ -1,11 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using ClaudeUsageMonitor.Models;
 
@@ -26,8 +29,80 @@ public class UsageService : IDisposable
     private const string UsageUrl = "https://api.anthropic.com/api/oauth/usage";
     private const string ClientId = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
 
-    private readonly HttpClient _httpClient = new();
+    // A pooled connection that outlives a network change (sleep/resume, VPN,
+    // DHCP renew) is dead but still gets reused, so every request hangs until
+    // it times out. Recycling connections on an interval bounds that window.
+    private static readonly TimeSpan ConnectionRecycleInterval = TimeSpan.FromMinutes(2);
+    private static readonly TimeSpan ConnectionIdleTimeout = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan ConnectionEstablishTimeout = TimeSpan.FromSeconds(10);
+
+    // Well under the two-minute poll interval so a stalled request fails and
+    // retries on the next tick instead of straddling it.
+    private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(30);
+
+    // Used when a rate-limited response carries no usable Retry-After header.
+    private static readonly TimeSpan DefaultRetryAfter = TimeSpan.FromMinutes(5);
+
+    private readonly HttpClient _httpClient = CreateHttpClient();
     private OAuthCredentials? _credentials;
+
+    private static HttpClient CreateHttpClient()
+    {
+        var handler = new SocketsHttpHandler
+        {
+            PooledConnectionLifetime = ConnectionRecycleInterval,
+            PooledConnectionIdleTimeout = ConnectionIdleTimeout,
+            ConnectCallback = ConnectAsync
+        };
+
+        return new HttpClient(handler)
+        {
+            Timeout = RequestTimeout
+        };
+    }
+
+    // The API publishes both A and AAAA records and the resolver hands back the
+    // AAAA first, so on a network whose IPv6 route black-holes (common while a
+    // VPN is up) the default connector stalls until the request times out.
+    // Walk the addresses IPv4-first with a short per-address budget instead.
+    private static async ValueTask<Stream> ConnectAsync(
+        SocketsHttpConnectionContext context,
+        CancellationToken cancellationToken)
+    {
+        var addresses = await Dns.GetHostAddressesAsync(context.DnsEndPoint.Host, cancellationToken);
+        var ordered = addresses
+            .OrderBy(address => address.AddressFamily == AddressFamily.InterNetwork ? 0 : 1)
+            .ToArray();
+
+        Exception? lastFailure = null;
+        foreach (var address in ordered)
+        {
+            var socket = new Socket(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp)
+            {
+                NoDelay = true
+            };
+
+            try
+            {
+                using var attempt = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                attempt.CancelAfter(ConnectionEstablishTimeout);
+                await socket.ConnectAsync(address, context.DnsEndPoint.Port, attempt.Token);
+                return new NetworkStream(socket, ownsSocket: true);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                socket.Dispose();
+                throw;
+            }
+            catch (Exception ex)
+            {
+                socket.Dispose();
+                lastFailure = ex;
+            }
+        }
+
+        throw lastFailure ?? new SocketException((int) SocketError.HostNotFound);
+    }
 
     public void Dispose() => _httpClient.Dispose();
 
@@ -77,20 +152,18 @@ public class UsageService : IDisposable
             result = await SendUsageRequestAsync();
         }
 
+        // A 429 here is a genuine rate limit, not an auth failure — the endpoint
+        // answers an invalid token with 401, which the branch above already
+        // handles. Refreshing would not lift the limit, and it would rotate the
+        // refresh token in the credentials file Claude Code shares.
         if (result.StatusCode == HttpStatusCode.TooManyRequests)
         {
-            await RefreshTokenAsync();
-            result = await SendUsageRequestAsync();
-
-            if (result.StatusCode == HttpStatusCode.TooManyRequests)
+            var retryAfter = result.RetryAfter ?? DefaultRetryAfter;
+            if (retryAfter <= TimeSpan.Zero)
             {
-                var retryAfter = result.RetryAfter ?? TimeSpan.FromMinutes(5);
-                if (retryAfter <= TimeSpan.Zero)
-                {
-                    retryAfter = TimeSpan.FromMinutes(5);
-                }
-                throw new RateLimitedException(retryAfter);
+                retryAfter = DefaultRetryAfter;
             }
+            throw new RateLimitedException(retryAfter);
         }
 
         if (!result.IsSuccess)

@@ -27,7 +27,7 @@ public partial class SettingsWindow : Window
         ShowFiveHourCheck.IsChecked = settings.ShowFiveHourGauge;
         ShowWeeklyCheck.IsChecked = settings.ShowWeeklyGauge;
         ShowOpusCheck.IsChecked = settings.ShowOpusGauge;
-        ShowSonnetCheck.IsChecked = settings.ShowSonnetGauge;
+        ShowWeeklyLimitsCheck.IsChecked = settings.ShowWeeklyLimits;
         LoggingEnabledCheck.IsChecked = settings.LoggingEnabled;
         LogDirectoryBox.Text = settings.LogDirectory ?? string.Empty;
         MinimizeToTrayCheck.IsChecked = settings.MinimizeToTray;
@@ -73,7 +73,7 @@ public partial class SettingsWindow : Window
         _settings.ShowFiveHourGauge = ShowFiveHourCheck.IsChecked == true;
         _settings.ShowWeeklyGauge = ShowWeeklyCheck.IsChecked == true;
         _settings.ShowOpusGauge = ShowOpusCheck.IsChecked == true;
-        _settings.ShowSonnetGauge = ShowSonnetCheck.IsChecked == true;
+        _settings.ShowWeeklyLimits = ShowWeeklyLimitsCheck.IsChecked == true;
         _settings.LoggingEnabled = LoggingEnabledCheck.IsChecked == true;
         _settings.LogDirectory = string.IsNullOrWhiteSpace(LogDirectoryBox.Text)
             ? null

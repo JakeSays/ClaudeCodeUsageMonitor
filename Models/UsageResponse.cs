@@ -20,6 +20,9 @@ public class UsageResponse
 
     [JsonPropertyName("extra_usage")]
     public ExtraUsage? ExtraUsage { get; set; }
+
+    [JsonPropertyName("limits")]
+    public UsageLimit[]? Limits { get; set; }
 }
 
 public class UsageWindow

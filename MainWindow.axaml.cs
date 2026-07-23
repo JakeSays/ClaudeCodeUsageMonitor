@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Layout;
+using Avalonia.Media;
 using Avalonia.Threading;
 using ClaudeUsageMonitor.Controls;
 using ClaudeUsageMonitor.Models;
@@ -113,13 +116,13 @@ public partial class MainWindow : Window
         Gauge5Hour.IsVisible = settings.ShowFiveHourGauge;
         GaugeWeekly.IsVisible = settings.ShowWeeklyGauge;
         GaugeOpus.IsVisible = settings.ShowOpusGauge;
-        GaugeSonnet.IsVisible = settings.ShowSonnetGauge;
+        WeeklyLimitsPanel.IsVisible = settings.ShowWeeklyLimits;
 
         var visibleCount =
             (settings.ShowFiveHourGauge ? 1 : 0) +
             (settings.ShowWeeklyGauge ? 1 : 0) +
             (settings.ShowOpusGauge ? 1 : 0) +
-            (settings.ShowSonnetGauge ? 1 : 0);
+            (settings.ShowWeeklyLimits ? 1 : 0);
         var columns = Math.Max(1, visibleCount);
         GaugeGrid.Columns = columns;
         Width = columns * GaugeColumnWidth + WindowChromeWidth;
@@ -148,12 +151,11 @@ public partial class MainWindow : Window
             UpdateGauge(Gauge5Hour, usage.FiveHour);
             UpdateGauge(GaugeWeekly, usage.SevenDay);
             UpdateGauge(GaugeOpus, usage.SevenDayOpus);
-            UpdateGauge(GaugeSonnet, usage.SevenDaySonnet);
+            UpdateWeeklyLimits(usage.Limits);
 
             CheckThresholdCrossing("5-Hour", Gauge5Hour.Value);
             CheckThresholdCrossing("Weekly", GaugeWeekly.Value);
             CheckThresholdCrossing("Opus", GaugeOpus.Value);
-            CheckThresholdCrossing("Sonnet", GaugeSonnet.Value);
 
             UpdateTrayTooltip();
             StatusText.Text = $"{DateTime.Now:g}";
@@ -187,6 +189,7 @@ public partial class MainWindow : Window
         {
             gauge.Value = 0;
             gauge.ResetText = "No data";
+            gauge.ResetSubText = null;
             gauge.ErrorText = null;
             return;
         }
@@ -199,18 +202,22 @@ public partial class MainWindow : Window
             var remaining = window.ResetsAt.Value - DateTimeOffset.UtcNow;
             if (remaining.TotalSeconds > 0)
             {
-                gauge.ResetText = remaining.TotalHours >= 1
-                    ? $"Resets in {remaining.Hours + (int) remaining.TotalDays * 24}h {remaining.Minutes}m"
-                    : $"Resets in {remaining.Minutes}m";
+                gauge.ResetText = $"Resets on {window.ResetsAt.Value.LocalDateTime:M/d h:mm tt}";
+                var totalHours = (int) Math.Floor(remaining.TotalHours);
+                gauge.ResetSubText = totalHours >= 1
+                    ? $"{totalHours}h {remaining.Minutes}m"
+                    : $"{remaining.Minutes}m";
             }
             else
             {
                 gauge.ResetText = "Resetting...";
+                gauge.ResetSubText = null;
             }
         }
         else
         {
             gauge.ResetText = null;
+            gauge.ResetSubText = null;
         }
     }
 
@@ -240,7 +247,7 @@ public partial class MainWindow : Window
         }
 
         icons[0].ToolTipText =
-            $"5-Hour: {Gauge5Hour.Value:F0}%  Weekly: {GaugeWeekly.Value:F0}%  Opus: {GaugeOpus.Value:F0}%  Sonnet: {GaugeSonnet.Value:F0}%";
+            $"5-Hour: {Gauge5Hour.Value:F0}%  Weekly: {GaugeWeekly.Value:F0}%  Opus: {GaugeOpus.Value:F0}%";
     }
 
     private void SetError(string message)
@@ -249,6 +256,95 @@ public partial class MainWindow : Window
         Gauge5Hour.ErrorText = "Error";
         GaugeWeekly.ErrorText = "Error";
         GaugeOpus.ErrorText = "Error";
-        GaugeSonnet.ErrorText = "Error";
+    }
+
+    private static readonly Color LimitNameColor = Color.FromRgb(224, 224, 240);
+    private static readonly Color LimitDetailColor = Color.FromRgb(130, 130, 145);
+    private static readonly Color LimitInactiveColor = Color.FromRgb(110, 110, 125);
+    private static readonly Color LimitTrackColor = Color.FromRgb(51, 51, 77);
+
+    private void UpdateWeeklyLimits(UsageLimit[]? limits)
+    {
+        WeeklyLimitsList.Children.Clear();
+
+        // Only model-scoped entries — the unscoped weekly_all limit is already
+        // the Weekly gauge.
+        var weekly = limits?
+            .Where(limit => limit.Group == "weekly" && limit.Scope?.Model != null)
+            .OrderByDescending(limit => limit.Percent)
+            .ToList();
+
+        if (weekly == null || weekly.Count == 0)
+        {
+            WeeklyLimitsList.Children.Add(new TextBlock
+            {
+                Text = "No per-model limits reported",
+                FontSize = 11,
+                Foreground = new SolidColorBrush(LimitDetailColor),
+                HorizontalAlignment = HorizontalAlignment.Center
+            });
+            return;
+        }
+
+        foreach (var limit in weekly)
+        {
+            WeeklyLimitsList.Children.Add(BuildLimitRow(limit));
+        }
+    }
+
+    private static Control BuildLimitRow(UsageLimit limit)
+    {
+        var nameText = new TextBlock
+        {
+            Text = limit.DisplayName,
+            FontSize = 12,
+            FontWeight = limit.IsActive ? FontWeight.SemiBold : FontWeight.Normal,
+            Foreground = new SolidColorBrush(limit.IsActive ? LimitNameColor : LimitInactiveColor)
+        };
+
+        var percentText = new TextBlock
+        {
+            Text = $"{limit.Percent:F0}%",
+            FontSize = 12,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = new SolidColorBrush(GaugeControl.ColorForValue(limit.Percent)),
+            HorizontalAlignment = HorizontalAlignment.Right
+        };
+
+        var header = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,Auto")
+        };
+        header.Children.Add(nameText);
+        Grid.SetColumn(percentText, 1);
+        header.Children.Add(percentText);
+
+        var bar = new ProgressBar
+        {
+            Minimum = 0,
+            Maximum = 100,
+            Value = Math.Clamp(limit.Percent, 0, 100),
+            Height = 5,
+            Margin = new Thickness(0, 3, 0, 0),
+            Background = new SolidColorBrush(LimitTrackColor),
+            Foreground = new SolidColorBrush(GaugeControl.ColorForValue(limit.Percent))
+        };
+
+        var row = new StackPanel();
+        row.Children.Add(header);
+        row.Children.Add(bar);
+
+        var detail = limit.ResetsAt != null
+            ? $"resets {limit.ResetsAt.Value.LocalDateTime:M/d h:mm tt}"
+            : "no reset reported";
+        row.Children.Add(new TextBlock
+        {
+            Text = detail,
+            FontSize = 10,
+            Foreground = new SolidColorBrush(LimitDetailColor),
+            Margin = new Thickness(0, 2, 0, 0)
+        });
+
+        return row;
     }
 }

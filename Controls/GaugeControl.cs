@@ -18,12 +18,15 @@ public class GaugeControl : Control
     public static readonly StyledProperty<string?> ResetTextProperty =
         AvaloniaProperty.Register<GaugeControl, string?>(nameof(ResetText));
 
+    public static readonly StyledProperty<string?> ResetSubTextProperty =
+        AvaloniaProperty.Register<GaugeControl, string?>(nameof(ResetSubText));
+
     public static readonly StyledProperty<string?> ErrorTextProperty =
         AvaloniaProperty.Register<GaugeControl, string?>(nameof(ErrorText));
 
     static GaugeControl()
     {
-        AffectsRender<GaugeControl>(ValueProperty, LabelProperty, ResetTextProperty, ErrorTextProperty);
+        AffectsRender<GaugeControl>(ValueProperty, LabelProperty, ResetTextProperty, ResetSubTextProperty, ErrorTextProperty);
     }
 
     public double Value
@@ -42,6 +45,12 @@ public class GaugeControl : Control
     {
         get => GetValue(ResetTextProperty);
         set => SetValue(ResetTextProperty, value);
+    }
+
+    public string? ResetSubText
+    {
+        get => GetValue(ResetSubTextProperty);
+        set => SetValue(ResetSubTextProperty, value);
     }
 
     public string? ErrorText
@@ -80,7 +89,7 @@ public class GaugeControl : Control
         // Draw filled arc with color based on value
         if (value > 0)
         {
-            var gaugeColor = GetGaugeColor(value);
+            var gaugeColor = ColorForValue(value);
             var fillPen = new Pen(new SolidColorBrush(gaugeColor), thickness, lineCap: PenLineCap.Round);
             DrawArc(
                 context, centerX, centerY, radius, startAngleDeg,
@@ -121,34 +130,52 @@ public class GaugeControl : Control
             new Typeface("Inter", FontStyle.Normal, FontWeight.SemiBold),
             size * 0.075,
             new SolidColorBrush(Color.FromRgb(180, 180, 190)));
+        var labelY = centerY + radius - 1;
         context.DrawText(
             labelText,
-            new Point(centerX - labelText.Width / 2, centerY + radius + thickness + 8));
+            new Point(centerX - labelText.Width / 2, labelY));
 
         // Draw reset text or error text below label
-        var bottomText = ErrorText ?? ResetText;
-        if (bottomText == null)
+        var line1 = ErrorText ?? ResetText;
+        if (line1 == null)
         {
             return;
         }
 
-        var color = ErrorText != null
+        var line1Color = ErrorText != null
             ? Color.FromRgb(255, 100, 100)
-            : Color.FromRgb(130, 130, 145);
-        var resetFormattedText = new FormattedText(
-            bottomText,
+            : Color.FromRgb(180, 180, 190);
+        var line1Text = new FormattedText(
+            line1,
             CultureInfo.InvariantCulture,
             FlowDirection.LeftToRight,
             new Typeface("Inter"),
             size * 0.058,
-            new SolidColorBrush(color));
+            new SolidColorBrush(line1Color));
+        var line1Y = labelY + labelText.Height + 2;
         context.DrawText(
-            resetFormattedText,
-            new Point(
-                centerX - resetFormattedText.Width / 2, centerY + radius + thickness + 8 + labelText.Height + 4));
+            line1Text,
+            new Point(centerX - line1Text.Width / 2, line1Y));
+
+        var line2 = ErrorText == null ? ResetSubText : null;
+        if (line2 == null)
+        {
+            return;
+        }
+
+        var line2Text = new FormattedText(
+            line2,
+            CultureInfo.InvariantCulture,
+            FlowDirection.LeftToRight,
+            new Typeface("Inter"),
+            size * 0.065,
+            new SolidColorBrush(Color.FromRgb(130, 130, 145)));
+        context.DrawText(
+            line2Text,
+            new Point(centerX - line2Text.Width / 2, line1Y + line1Text.Height + 1));
     }
 
-    private static Color GetGaugeColor(double value)
+    public static Color ColorForValue(double value)
     {
         return value switch
         {

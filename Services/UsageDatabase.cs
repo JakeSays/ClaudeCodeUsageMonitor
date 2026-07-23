@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 using Microsoft.Data.Sqlite;
 using ClaudeUsageMonitor.Models;
 
@@ -15,6 +16,10 @@ public class UsageDatabase : IDisposable
         "usage-monitor.db");
 
     private readonly SqliteConnection _connection;
+
+    // The charts window reads on a background thread while the poll timer
+    // inserts from the UI thread, and one connection cannot serve both at once.
+    private readonly Lock _gate = new();
 
     public UsageDatabase() : this(DefaultDatabasePath)
     {
@@ -63,55 +68,58 @@ public class UsageDatabase : IDisposable
     {
         try
         {
-            using var cmd = _connection.CreateCommand();
-            cmd.CommandText = @"
-                INSERT OR REPLACE INTO Samples (
-                    Timestamp,
-                    FiveHourUtilization, FiveHourResetsAt,
-                    WeeklyUtilization, WeeklyResetsAt,
-                    OpusUtilization, OpusResetsAt,
-                    SonnetUtilization, SonnetResetsAt,
-                    ExtraEnabled, ExtraMonthlyLimit, ExtraUsedCredits, ExtraUtilization,
-                    Error
-                ) VALUES (
-                    $Timestamp,
-                    $FiveHourUtilization, $FiveHourResetsAt,
-                    $WeeklyUtilization, $WeeklyResetsAt,
-                    $OpusUtilization, $OpusResetsAt,
-                    $SonnetUtilization, $SonnetResetsAt,
-                    $ExtraEnabled, $ExtraMonthlyLimit, $ExtraUsedCredits, $ExtraUtilization,
-                    $Error
-                );
-            ";
+            lock (_gate)
+            {
+                using var cmd = _connection.CreateCommand();
+                cmd.CommandText = @"
+                    INSERT OR REPLACE INTO Samples (
+                        Timestamp,
+                        FiveHourUtilization, FiveHourResetsAt,
+                        WeeklyUtilization, WeeklyResetsAt,
+                        OpusUtilization, OpusResetsAt,
+                        SonnetUtilization, SonnetResetsAt,
+                        ExtraEnabled, ExtraMonthlyLimit, ExtraUsedCredits, ExtraUtilization,
+                        Error
+                    ) VALUES (
+                        $Timestamp,
+                        $FiveHourUtilization, $FiveHourResetsAt,
+                        $WeeklyUtilization, $WeeklyResetsAt,
+                        $OpusUtilization, $OpusResetsAt,
+                        $SonnetUtilization, $SonnetResetsAt,
+                        $ExtraEnabled, $ExtraMonthlyLimit, $ExtraUsedCredits, $ExtraUtilization,
+                        $Error
+                    );
+                ";
 
-            cmd.Parameters.AddWithValue("$Timestamp", DateTimeOffset.Now.Ticks);
-            cmd.Parameters.AddWithValue("$FiveHourUtilization",
-                (object?) usage?.FiveHour?.Utilization ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("$FiveHourResetsAt",
-                usage?.FiveHour?.ResetsAt is { } fiveHourResetsAt ? fiveHourResetsAt.ToLocalTime().Ticks : DBNull.Value);
-            cmd.Parameters.AddWithValue("$WeeklyUtilization",
-                (object?) usage?.SevenDay?.Utilization ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("$WeeklyResetsAt",
-                usage?.SevenDay?.ResetsAt is { } weeklyResetsAt ? weeklyResetsAt.ToLocalTime().Ticks : DBNull.Value);
-            cmd.Parameters.AddWithValue("$OpusUtilization",
-                (object?) usage?.SevenDayOpus?.Utilization ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("$OpusResetsAt",
-                usage?.SevenDayOpus?.ResetsAt is { } opusResetsAt ? opusResetsAt.ToLocalTime().Ticks : DBNull.Value);
-            cmd.Parameters.AddWithValue("$SonnetUtilization",
-                (object?) usage?.SevenDaySonnet?.Utilization ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("$SonnetResetsAt",
-                usage?.SevenDaySonnet?.ResetsAt is { } sonnetResetsAt ? sonnetResetsAt.ToLocalTime().Ticks : DBNull.Value);
-            cmd.Parameters.AddWithValue("$ExtraEnabled",
-                usage?.ExtraUsage?.IsEnabled is { } extraEnabled ? (extraEnabled ? 1 : 0) : DBNull.Value);
-            cmd.Parameters.AddWithValue("$ExtraMonthlyLimit",
-                (object?) usage?.ExtraUsage?.MonthlyLimit ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("$ExtraUsedCredits",
-                (object?) usage?.ExtraUsage?.UsedCredits ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("$ExtraUtilization",
-                (object?) usage?.ExtraUsage?.Utilization ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("$Error", (object?) error ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$Timestamp", DateTimeOffset.Now.Ticks);
+                cmd.Parameters.AddWithValue("$FiveHourUtilization",
+                    (object?) usage?.FiveHour?.Utilization ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$FiveHourResetsAt",
+                    usage?.FiveHour?.ResetsAt is { } fiveHourResetsAt ? fiveHourResetsAt.ToLocalTime().Ticks : DBNull.Value);
+                cmd.Parameters.AddWithValue("$WeeklyUtilization",
+                    (object?) usage?.SevenDay?.Utilization ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$WeeklyResetsAt",
+                    usage?.SevenDay?.ResetsAt is { } weeklyResetsAt ? weeklyResetsAt.ToLocalTime().Ticks : DBNull.Value);
+                cmd.Parameters.AddWithValue("$OpusUtilization",
+                    (object?) usage?.SevenDayOpus?.Utilization ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$OpusResetsAt",
+                    usage?.SevenDayOpus?.ResetsAt is { } opusResetsAt ? opusResetsAt.ToLocalTime().Ticks : DBNull.Value);
+                cmd.Parameters.AddWithValue("$SonnetUtilization",
+                    (object?) usage?.SevenDaySonnet?.Utilization ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$SonnetResetsAt",
+                    usage?.SevenDaySonnet?.ResetsAt is { } sonnetResetsAt ? sonnetResetsAt.ToLocalTime().Ticks : DBNull.Value);
+                cmd.Parameters.AddWithValue("$ExtraEnabled",
+                    usage?.ExtraUsage?.IsEnabled is { } extraEnabled ? (extraEnabled ? 1 : 0) : DBNull.Value);
+                cmd.Parameters.AddWithValue("$ExtraMonthlyLimit",
+                    (object?) usage?.ExtraUsage?.MonthlyLimit ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$ExtraUsedCredits",
+                    (object?) usage?.ExtraUsage?.UsedCredits ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$ExtraUtilization",
+                    (object?) usage?.ExtraUsage?.Utilization ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$Error", (object?) error ?? DBNull.Value);
 
-            cmd.ExecuteNonQuery();
+                cmd.ExecuteNonQuery();
+            }
         }
         catch
         {
@@ -148,26 +156,29 @@ public class UsageDatabase : IDisposable
 
     public List<UsageSample> GetAll()
     {
-        var results = new List<UsageSample>();
-        using var cmd = _connection.CreateCommand();
-        cmd.CommandText = @"
-            SELECT Timestamp,
-                   FiveHourUtilization, FiveHourResetsAt,
-                   WeeklyUtilization, WeeklyResetsAt,
-                   OpusUtilization, OpusResetsAt,
-                   SonnetUtilization, SonnetResetsAt,
-                   ExtraEnabled, ExtraMonthlyLimit, ExtraUsedCredits, ExtraUtilization,
-                   Error
-            FROM Samples
-            ORDER BY Timestamp ASC;
-        ";
-
-        using var reader = cmd.ExecuteReader();
-        while (reader.Read())
+        lock (_gate)
         {
-            results.Add(ReadSample(reader));
+            var results = new List<UsageSample>();
+            using var cmd = _connection.CreateCommand();
+            cmd.CommandText = @"
+                SELECT Timestamp,
+                       FiveHourUtilization, FiveHourResetsAt,
+                       WeeklyUtilization, WeeklyResetsAt,
+                       OpusUtilization, OpusResetsAt,
+                       SonnetUtilization, SonnetResetsAt,
+                       ExtraEnabled, ExtraMonthlyLimit, ExtraUsedCredits, ExtraUtilization,
+                       Error
+                FROM Samples
+                ORDER BY Timestamp ASC;
+            ";
+
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                results.Add(ReadSample(reader));
+            }
+            return results;
         }
-        return results;
     }
 
     public List<long> GetDistinctWeeklyResets()
@@ -207,6 +218,13 @@ public class UsageDatabase : IDisposable
         Error = r.IsDBNull(13) ? null : r.GetString(13)
     };
 
-    private static DateTimeOffset LocalFromTicks(long ticks) =>
-        new(new DateTime(ticks, DateTimeKind.Unspecified), TimeZoneInfo.Local.GetUtcOffset(new DateTime(ticks, DateTimeKind.Unspecified)));
+    // Reading the whole table calls this several times per row, so it caches the
+    // zone and builds the DateTime once rather than twice.
+    private static readonly TimeZoneInfo LocalTimeZone = TimeZoneInfo.Local;
+
+    private static DateTimeOffset LocalFromTicks(long ticks)
+    {
+        var value = new DateTime(ticks, DateTimeKind.Unspecified);
+        return new DateTimeOffset(value, LocalTimeZone.GetUtcOffset(value));
+    }
 }

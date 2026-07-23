@@ -3,7 +3,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:controls="using:ClaudeUsageMonitor.Controls"
-        mc:Ignorable="d" d:DesignWidth="1180" d:DesignHeight="380"
+        mc:Ignorable="d" d:DesignWidth="1180" d:DesignHeight="420"
         x:Class="ClaudeUsageMonitor.MainWindow"
         Title="Claude Code Usage Monitor"
         Icon="avares://ClaudeUsageMonitor/Assets/icon.ico"
@@ -57,9 +57,22 @@
             <controls:GaugeControl x:Name="GaugeOpus"
                                    Label="Opus Weekly"
                                    Value="0" />
-            <controls:GaugeControl x:Name="GaugeSonnet"
-                                   Label="Sonnet Weekly"
-                                   Value="0" />
+            <Border x:Name="WeeklyLimitsPanel"
+                    Margin="8,20,8,8"
+                    Padding="12,10"
+                    CornerRadius="6"
+                    BorderThickness="1"
+                    BorderBrush="#33334d"
+                    Background="#22223a">
+                <StackPanel>
+                    <TextBlock Text="Weekly Limits"
+                               FontSize="13" FontWeight="SemiBold"
+                               Foreground="#b4b4be"
+                               HorizontalAlignment="Center"
+                               Margin="0,0,0,8" />
+                    <StackPanel x:Name="WeeklyLimitsList" Spacing="6" />
+                </StackPanel>
+            </Border>
         </UniformGrid>
     </Grid>
 </Window>
