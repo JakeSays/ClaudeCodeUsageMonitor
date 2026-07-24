@@ -25,6 +25,7 @@
         <InvariantGlobalization>true</InvariantGlobalization>
         <StripSymbols>true</StripSymbols>
         <OptimizationPreference>Speed</OptimizationPreference>
+        <PublishDir>/apps/ClaudeUsageMonitor</PublishDir>
         <DebugType Condition="'$(Configuration)' != 'Debug'">None</DebugType>
     </PropertyGroup>
 

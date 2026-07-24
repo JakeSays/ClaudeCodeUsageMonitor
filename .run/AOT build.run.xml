@@ -1,0 +1,10 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="AOT build" type="DotNetFolderPublish" factoryName="Publish to folder">
+    <riderPublish configuration="Release" platform="Any CPU" produce_single_file="true" self_contained="true" target_folder="/apps/ClaudeUsageMonitor" target_framework="net10.0" trim_unused_assemblies="true" uuid_high="9025497081143303551" uuid_low="-3344963924720846131">
+      <runtimes>
+        <item value="linux-x64" />
+      </runtimes>
+    </riderPublish>
+    <method v="2" />
+  </configuration>
+</component>
