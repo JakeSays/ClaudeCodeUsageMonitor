@@ -6,6 +6,12 @@ using System.Text.Json.Serialization;
 
 namespace ClaudeUsageMonitor.Services;
 
+public enum WeeklyPanelMode
+{
+    Limits,
+    BurnRateChart
+}
+
 public class AppSettings
 {
     public bool MinimizeToTray { get; set; }
@@ -14,6 +20,7 @@ public class AppSettings
     public bool ShowWeeklyGauge { get; set; } = true;
     public bool ShowOpusGauge { get; set; } = true;
     public bool ShowWeeklyLimits { get; set; } = true;
+    public WeeklyPanelMode WeeklyPanelMode { get; set; } = WeeklyPanelMode.Limits;
 
     public bool LoggingEnabled { get; set; }
     public string? LogDirectory { get; set; }

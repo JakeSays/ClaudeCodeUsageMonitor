@@ -28,6 +28,8 @@ public partial class SettingsWindow : Window
         ShowWeeklyCheck.IsChecked = settings.ShowWeeklyGauge;
         ShowOpusCheck.IsChecked = settings.ShowOpusGauge;
         ShowWeeklyLimitsCheck.IsChecked = settings.ShowWeeklyLimits;
+        WeeklyPanelListRadio.IsChecked = settings.WeeklyPanelMode == WeeklyPanelMode.Limits;
+        WeeklyPanelChartRadio.IsChecked = settings.WeeklyPanelMode == WeeklyPanelMode.BurnRateChart;
         LoggingEnabledCheck.IsChecked = settings.LoggingEnabled;
         LogDirectoryBox.Text = settings.LogDirectory ?? string.Empty;
         MinimizeToTrayCheck.IsChecked = settings.MinimizeToTray;
@@ -74,6 +76,9 @@ public partial class SettingsWindow : Window
         _settings.ShowWeeklyGauge = ShowWeeklyCheck.IsChecked == true;
         _settings.ShowOpusGauge = ShowOpusCheck.IsChecked == true;
         _settings.ShowWeeklyLimits = ShowWeeklyLimitsCheck.IsChecked == true;
+        _settings.WeeklyPanelMode = WeeklyPanelChartRadio.IsChecked == true
+            ? WeeklyPanelMode.BurnRateChart
+            : WeeklyPanelMode.Limits;
         _settings.LoggingEnabled = LoggingEnabledCheck.IsChecked == true;
         _settings.LogDirectory = string.IsNullOrWhiteSpace(LogDirectoryBox.Text)
             ? null

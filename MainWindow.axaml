@@ -3,6 +3,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:controls="using:ClaudeUsageMonitor.Controls"
+        xmlns:scottplot="clr-namespace:ScottPlot.Avalonia;assembly=ScottPlot.Avalonia"
         mc:Ignorable="d" d:DesignWidth="1180" d:DesignHeight="420"
         x:Class="ClaudeUsageMonitor.MainWindow"
         Title="Claude Code Usage Monitor"
@@ -64,14 +65,22 @@
                     BorderThickness="1"
                     BorderBrush="#33334d"
                     Background="#22223a">
-                <StackPanel>
-                    <TextBlock Text="Weekly Limits"
+                <Grid RowDefinitions="Auto,*">
+                    <TextBlock Grid.Row="0"
+                               x:Name="WeeklyPanelHeader"
+                               Text="Weekly Limits"
                                FontSize="13" FontWeight="SemiBold"
                                Foreground="#b4b4be"
                                HorizontalAlignment="Center"
                                Margin="0,0,0,8" />
-                    <StackPanel x:Name="WeeklyLimitsList" Spacing="6" />
-                </StackPanel>
+                    <StackPanel Grid.Row="1"
+                                x:Name="WeeklyLimitsList"
+                                Spacing="6"
+                                VerticalAlignment="Top" />
+                    <scottplot:AvaPlot Grid.Row="1"
+                                       x:Name="BurnRateMiniPlot"
+                                       IsVisible="False" />
+                </Grid>
             </Border>
         </UniformGrid>
     </Grid>

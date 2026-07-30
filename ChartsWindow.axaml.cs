@@ -45,7 +45,7 @@ public partial class ChartsWindow : Window
         // hidden until it holds real data rather than showing it get redrawn.
         foreach (var control in _plots)
         {
-            StyleDarkPlot(control.Plot);
+            PlotTheme.StyleDarkPlot(control.Plot);
             control.IsVisible = false;
         }
 
@@ -131,79 +131,7 @@ public partial class ChartsWindow : Window
     // project forward to find the time the line crosses 100%. Compare to reset.
     private void BuildBurnRateForecast(List<UsageSample> samples)
     {
-        var plot = BurnRatePlot.Plot;
-        plot.Clear();
-        StyleDarkPlot(plot);
-        plot.Title("Weekly burn rate forecast (current cycle)");
-        plot.XLabel("Time");
-        plot.YLabel("Utilization %");
-
-        var current = CurrentCycleSamples(samples);
-        if (current.Count < 2)
-        {
-            plot.Add.Annotation("Not enough data in current cycle yet.", Alignment.MiddleCenter);
-            BurnRatePlot.Refresh();
-            return;
-        }
-
-        var xs = current.Select(s => s.Timestamp.LocalDateTime.ToOADate()).ToArray();
-        var ys = current.Select(s => s.WeeklyUtilization ?? 0).ToArray();
-
-        var actual = plot.Add.Scatter(xs, ys);
-        actual.LegendText = "Actual";
-        actual.Color = Colors.SkyBlue;
-        actual.LineWidth = 2;
-        actual.MarkerSize = 4;
-
-        // Linear fit on the most recent 24h (or all if shorter)
-        var fitWindowStart = current[^1].Timestamp.AddHours(-24);
-        var fitSlice = current.Where(s => s.Timestamp >= fitWindowStart).ToList();
-        if (fitSlice.Count >= 2)
-        {
-            var fitXs = fitSlice.Select(s => s.Timestamp.LocalDateTime.ToOADate()).ToArray();
-            var fitYs = fitSlice.Select(s => s.WeeklyUtilization ?? 0).ToArray();
-            var (slope, intercept) = LinearFit(fitXs, fitYs);
-
-            var resetX = current[^1].WeeklyResetsAt?.LocalDateTime.ToOADate() ?? fitXs[^1] + 7;
-            var hit100X = slope > 0 ? (100 - intercept) / slope : double.NaN;
-            var endX = double.IsNaN(hit100X) ? resetX : Math.Min(hit100X + 0.5, resetX);
-            endX = Math.Max(endX, fitXs[^1]);
-
-            var lineXs = new[] { fitXs[0], endX };
-            var lineYs = new[] { slope * fitXs[0] + intercept, slope * endX + intercept };
-            var forecast = plot.Add.Scatter(lineXs, lineYs);
-            forecast.LegendText = "Forecast";
-            forecast.LineStyle.Pattern = LinePattern.Dashed;
-            forecast.Color = Colors.Orange;
-            forecast.LineWidth = 2;
-            forecast.MarkerSize = 0;
-
-            if (!double.IsNaN(hit100X) && slope > 0)
-            {
-                var hitTime = DateTime.FromOADate(hit100X);
-                var resetTime = current[^1].WeeklyResetsAt?.LocalDateTime;
-                var note = resetTime.HasValue
-                    ? hit100X < resetX
-                        ? $"Hits 100% at {hitTime:M/d HH:mm} — {(resetTime.Value - hitTime).TotalHours:F1}h before reset"
-                        : $"Won't hit 100% before reset ({resetTime:M/d HH:mm})"
-                    : $"Hits 100% at {hitTime:M/d HH:mm}";
-                plot.Add.Annotation(note, Alignment.UpperLeft);
-            }
-
-            // Vertical line at reset
-            var resetLine = plot.Add.VerticalLine(resetX);
-            resetLine.Color = Colors.Red.WithAlpha(0.5);
-            resetLine.LineStyle.Pattern = LinePattern.Dotted;
-            resetLine.LegendText = "Reset";
-        }
-
-        // Horizontal line at 100%
-        var capLine = plot.Add.HorizontalLine(100);
-        capLine.Color = Colors.Red.WithAlpha(0.4);
-        capLine.LineStyle.Pattern = LinePattern.Dotted;
-
-        UseDateTimeBottomAxis(plot);
-        plot.ShowLegend();
+        BurnRateChartBuilder.Build(BurnRatePlot.Plot, samples);
         BurnRatePlot.Refresh();
     }
 
@@ -214,7 +142,7 @@ public partial class ChartsWindow : Window
     {
         var plot = DailyUsagePlot.Plot;
         plot.Clear();
-        StyleDarkPlot(plot);
+        PlotTheme.StyleDarkPlot(plot);
         plot.Title("Weekly utilization consumed per day");
         plot.XLabel("Date");
         plot.YLabel("Utilization % gained");
@@ -271,7 +199,7 @@ public partial class ChartsWindow : Window
     {
         var plot = UsageHistoryPlot.Plot;
         plot.Clear();
-        StyleDarkPlot(plot);
+        PlotTheme.StyleDarkPlot(plot);
         plot.Title("Weekly utilization over time");
         plot.XLabel("Time");
         plot.YLabel("Utilization %");
@@ -310,7 +238,7 @@ public partial class ChartsWindow : Window
         }
 
         plot.Add.HorizontalLine(100, color: Colors.Red.WithAlpha(0.4));
-        UseDateTimeBottomAxis(plot);
+        PlotTheme.UseDateTimeBottomAxis(plot);
         UsageHistoryPlot.Refresh();
     }
 
@@ -320,12 +248,12 @@ public partial class ChartsWindow : Window
     {
         var plot = WeeklyUsagePlot.Plot;
         plot.Clear();
-        StyleDarkPlot(plot);
+        PlotTheme.StyleDarkPlot(plot);
         plot.Title("Weekly utilization (current cycle)");
         plot.XLabel("Time");
         plot.YLabel("Utilization %");
 
-        var current = CurrentCycleSamples(samples)
+        var current = BurnRateChartBuilder.CurrentCycleSamples(samples)
             .Where(s => s.WeeklyUtilization != null)
             .ToList();
 
@@ -355,7 +283,7 @@ public partial class ChartsWindow : Window
         }
 
         plot.Add.HorizontalLine(100, color: Colors.Red.WithAlpha(0.4));
-        UseDateTimeBottomAxis(plot);
+        PlotTheme.UseDateTimeBottomAxis(plot);
         WeeklyUsagePlot.Refresh();
     }
 
@@ -365,7 +293,7 @@ public partial class ChartsWindow : Window
     {
         var plot = WaterfallPlot.Plot;
         plot.Clear();
-        StyleDarkPlot(plot);
+        PlotTheme.StyleDarkPlot(plot);
         plot.Title("Weekly utilization at reset");
         plot.XLabel("Cycle reset date");
         plot.YLabel("Final utilization %");
@@ -420,7 +348,7 @@ public partial class ChartsWindow : Window
     {
         var plot = FiveHourPlot.Plot;
         plot.Clear();
-        StyleDarkPlot(plot);
+        PlotTheme.StyleDarkPlot(plot);
         plot.Title("5-hour window utilization over time");
         plot.XLabel("Time");
         plot.YLabel("Utilization %");
@@ -446,7 +374,7 @@ public partial class ChartsWindow : Window
         line.LineWidth = 1.5f;
 
         plot.Add.HorizontalLine(100, color: Colors.Red.WithAlpha(0.4));
-        UseDateTimeBottomAxis(plot);
+        PlotTheme.UseDateTimeBottomAxis(plot);
         FiveHourPlot.Refresh();
     }
 
@@ -468,7 +396,7 @@ public partial class ChartsWindow : Window
 
         var plot = ExtraCreditsPlot.Plot;
         plot.Clear();
-        StyleDarkPlot(plot);
+        PlotTheme.StyleDarkPlot(plot);
 
         if (!enabled || monthlyLimit <= 0)
         {
@@ -574,70 +502,5 @@ public partial class ChartsWindow : Window
         plot.Axes.SetLimits(0.5, daysInMonth + 0.5, 0, yUpperBound);
         plot.ShowLegend();
         ExtraCreditsPlot.Refresh();
-    }
-
-    // ---- Helpers ----
-
-    // The API's resets_at drifts by a fraction of a second between polls, so a
-    // cycle has to be identified by its reset day — matching the exact value
-    // pairs a sample only with itself.
-    private static List<UsageSample> CurrentCycleSamples(List<UsageSample> samples)
-    {
-        var withReset = samples.Where(s => s.WeeklyResetsAt != null).ToList();
-        if (withReset.Count == 0)
-        {
-            return new List<UsageSample>();
-        }
-        var latestResetDay = withReset[^1].WeeklyResetsAt!.Value.Date;
-        return withReset.Where(s => s.WeeklyResetsAt!.Value.Date == latestResetDay).ToList();
-    }
-
-    private static (double slope, double intercept) LinearFit(double[] xs, double[] ys)
-    {
-        var n = xs.Length;
-        double sx = 0, sy = 0, sxx = 0, sxy = 0;
-        for (var i = 0; i < n; i++)
-        {
-            sx += xs[i];
-            sy += ys[i];
-            sxx += xs[i] * xs[i];
-            sxy += xs[i] * ys[i];
-        }
-        var denom = n * sxx - sx * sx;
-        if (denom == 0)
-        {
-            return (0, sy / n);
-        }
-        var slope = (n * sxy - sx * sy) / denom;
-        var intercept = (sy - slope * sx) / n;
-        return (slope, intercept);
-    }
-
-    private static readonly Color FigureBackgroundColor = Color.FromHex("#1a1a2e");
-    private static readonly Color DataBackgroundColor = Color.FromHex("#22223a");
-    private static readonly Color AxisForegroundColor = Color.FromHex("#b0b0c0");
-    private static readonly Color GridLineColor = Color.FromHex("#33334d");
-    private static readonly Color LegendBackgroundColor = Color.FromHex("#22223a");
-    private static readonly Color LegendForegroundColor = Color.FromHex("#e0e0f0");
-    private static readonly Color LegendOutlineColor = Color.FromHex("#444466");
-
-    private static void StyleDarkPlot(Plot plot)
-    {
-        plot.FigureBackground.Color = FigureBackgroundColor;
-        plot.DataBackground.Color = DataBackgroundColor;
-        plot.Axes.Color(AxisForegroundColor);
-        plot.Grid.MajorLineColor = GridLineColor;
-        plot.Legend.BackgroundColor = LegendBackgroundColor;
-        plot.Legend.FontColor = LegendForegroundColor;
-        plot.Legend.OutlineColor = LegendOutlineColor;
-    }
-
-    private static void UseDateTimeBottomAxis(Plot plot)
-    {
-        plot.Axes.DateTimeTicksBottom();
-        plot.Axes.Bottom.TickLabelStyle.ForeColor = AxisForegroundColor;
-        plot.Axes.Bottom.MajorTickStyle.Color = AxisForegroundColor;
-        plot.Axes.Bottom.MinorTickStyle.Color = AxisForegroundColor;
-        plot.Axes.Bottom.FrameLineStyle.Color = AxisForegroundColor;
     }
 }

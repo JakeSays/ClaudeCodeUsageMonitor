@@ -36,7 +36,15 @@
                 <CheckBox x:Name="ShowFiveHourCheck" Content="5-Hour Window" />
                 <CheckBox x:Name="ShowWeeklyCheck" Content="Weekly" />
                 <CheckBox x:Name="ShowOpusCheck" Content="Opus Weekly" />
-                <CheckBox x:Name="ShowWeeklyLimitsCheck" Content="Weekly Limits" />
+                <CheckBox x:Name="ShowWeeklyLimitsCheck" Content="Weekly Limits Panel" />
+                <StackPanel Orientation="Horizontal" Margin="22,4,0,0" Spacing="16">
+                    <RadioButton x:Name="WeeklyPanelListRadio"
+                                 GroupName="WeeklyPanelMode"
+                                 Content="List" />
+                    <RadioButton x:Name="WeeklyPanelChartRadio"
+                                 GroupName="WeeklyPanelMode"
+                                 Content="Burn Rate Chart" />
+                </StackPanel>
             </StackPanel>
 
             <StackPanel>

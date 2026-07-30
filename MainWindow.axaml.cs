@@ -103,6 +103,7 @@ public partial class MainWindow : Window
 
     private const double GaugeColumnWidth = 295;
     private const double WindowChromeWidth = 40;
+    private static readonly TimeSpan BurnRateChartLookback = TimeSpan.FromDays(8);
 
     private void ApplySettings()
     {
@@ -129,6 +130,23 @@ public partial class MainWindow : Window
 
         _logger.Enabled = settings.LoggingEnabled;
         _logger.LogOutputDirectory = settings.EffectiveLogDirectory;
+
+        var showBurnRateChart = settings.WeeklyPanelMode == WeeklyPanelMode.BurnRateChart;
+        WeeklyPanelHeader.Text = showBurnRateChart ? "Burn Rate Forecast" : "Weekly Limits";
+        WeeklyLimitsList.IsVisible = !showBurnRateChart;
+        BurnRateMiniPlot.IsVisible = showBurnRateChart;
+        if (showBurnRateChart)
+        {
+            _ = UpdateBurnRateChartAsync();
+        }
+    }
+
+    private async Task UpdateBurnRateChartAsync()
+    {
+        var since = DateTimeOffset.Now - BurnRateChartLookback;
+        var samples = await Task.Run(() => _database.GetRange(since, DateTimeOffset.Now));
+        BurnRateChartBuilder.Build(BurnRateMiniPlot.Plot, samples, compact: true);
+        BurnRateMiniPlot.Refresh();
     }
 
     private async Task PollUsageAsync()
@@ -180,6 +198,10 @@ public partial class MainWindow : Window
         {
             _logger.LogUpdate(usage, errorMessage);
             _database.Insert(usage, errorMessage);
+            if (Application.Current is App { Settings.WeeklyPanelMode: WeeklyPanelMode.BurnRateChart })
+            {
+                _ = UpdateBurnRateChartAsync();
+            }
         }
     }
 
