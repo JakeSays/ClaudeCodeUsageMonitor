@@ -23,6 +23,13 @@ public partial class MainWindow : Window
     private readonly UsageDatabase _database = new();
     private readonly Dictionary<string, double> _previousValues = new();
     private DispatcherTimer? _timer;
+    private DispatcherTimer? _countdownTimer;
+
+    // Cached from the last successful poll so the countdown text can keep
+    // ticking off the wall clock while polls are failing and retrying.
+    private UsageWindow? _lastFiveHour;
+    private UsageWindow? _lastWeekly;
+    private UsageWindow? _lastOpus;
 
     public UsageDatabase Database => _database;
 
@@ -75,12 +82,27 @@ public partial class MainWindow : Window
     {
         _ = PollUsageAsync();
 
+        var pollingMinutes = Application.Current is App app ? app.Settings.PollingIntervalMinutes : 2;
         _timer = new DispatcherTimer
         {
-            Interval = TimeSpan.FromMinutes(2)
+            Interval = TimeSpan.FromMinutes(pollingMinutes)
         };
         _timer.Tick += async (_, _) => await PollUsageAsync();
         _timer.Start();
+
+        _countdownTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(15)
+        };
+        _countdownTimer.Tick += (_, _) => RefreshCountdowns();
+        _countdownTimer.Start();
+    }
+
+    private void RefreshCountdowns()
+    {
+        UpdateGauge(Gauge5Hour, _lastFiveHour);
+        UpdateGauge(GaugeWeekly, _lastWeekly);
+        UpdateGauge(GaugeOpus, _lastOpus);
     }
 
     public void OnSettingsChanged() => ApplySettings();
@@ -131,6 +153,12 @@ public partial class MainWindow : Window
         _logger.Enabled = settings.LoggingEnabled;
         _logger.LogOutputDirectory = settings.EffectiveLogDirectory;
 
+        var pollingInterval = TimeSpan.FromMinutes(settings.PollingIntervalMinutes);
+        if (_timer != null && _timer.Interval != pollingInterval)
+        {
+            _timer.Interval = pollingInterval;
+        }
+
         var showBurnRateChart = settings.WeeklyPanelMode == WeeklyPanelMode.BurnRateChart;
         WeeklyPanelHeader.Text = showBurnRateChart ? "Burn Rate Forecast" : "Weekly Limits";
         WeeklyLimitsList.IsVisible = !showBurnRateChart;
@@ -166,10 +194,15 @@ public partial class MainWindow : Window
                 return;
             }
 
+            _lastFiveHour = usage.FiveHour;
+            _lastWeekly = usage.SevenDay;
+            _lastOpus = usage.SevenDayOpus;
+
             UpdateGauge(Gauge5Hour, usage.FiveHour);
             UpdateGauge(GaugeWeekly, usage.SevenDay);
             UpdateGauge(GaugeOpus, usage.SevenDayOpus);
             UpdateWeeklyLimits(usage.Limits);
+            ClearRetrying();
 
             CheckThresholdCrossing("5-Hour", Gauge5Hour.Value);
             CheckThresholdCrossing("Weekly", GaugeWeekly.Value);
@@ -212,12 +245,10 @@ public partial class MainWindow : Window
             gauge.Value = 0;
             gauge.ResetText = "No data";
             gauge.ResetSubText = null;
-            gauge.ErrorText = null;
             return;
         }
 
         gauge.Value = window.Utilization;
-        gauge.ErrorText = null;
 
         if (window.ResetsAt != null)
         {
@@ -275,9 +306,16 @@ public partial class MainWindow : Window
     private void SetError(string message)
     {
         ErrorMessageText.Text = message;
-        Gauge5Hour.ErrorText = "Error";
-        GaugeWeekly.ErrorText = "Error";
-        GaugeOpus.ErrorText = "Error";
+        Gauge5Hour.IsRetrying = true;
+        GaugeWeekly.IsRetrying = true;
+        GaugeOpus.IsRetrying = true;
+    }
+
+    private void ClearRetrying()
+    {
+        Gauge5Hour.IsRetrying = false;
+        GaugeWeekly.IsRetrying = false;
+        GaugeOpus.IsRetrying = false;
     }
 
     private static readonly Color LimitNameColor = Color.FromRgb(224, 224, 240);

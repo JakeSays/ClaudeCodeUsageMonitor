@@ -2,11 +2,11 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="520" d:DesignHeight="420"
+        mc:Ignorable="d" d:DesignWidth="520" d:DesignHeight="540"
         x:Class="ClaudeUsageMonitor.SettingsWindow"
         Title="Settings"
         Icon="avares://ClaudeUsageMonitor/Assets/icon.ico"
-        Width="520" Height="440"
+        Width="520" Height="560"
         Background="#1a1a2e"
         CanResize="False"
         WindowStartupLocation="CenterOwner">
@@ -70,6 +70,15 @@
             <StackPanel>
                 <TextBlock Classes="section" Text="Behavior" />
                 <CheckBox x:Name="MinimizeToTrayCheck" Content="Minimize to tray" />
+                <StackPanel Orientation="Horizontal" Margin="0,8,0,0" Spacing="8" VerticalAlignment="Center">
+                    <TextBlock Classes="label" Text="Polling interval (minutes):" VerticalAlignment="Center" Margin="0" />
+                    <NumericUpDown x:Name="PollingIntervalBox"
+                                   Minimum="1"
+                                   Maximum="60"
+                                   Increment="1"
+                                   FormatString="0"
+                                   Width="110" />
+                </StackPanel>
             </StackPanel>
 
         </StackPanel>

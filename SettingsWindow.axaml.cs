@@ -33,6 +33,7 @@ public partial class SettingsWindow : Window
         LoggingEnabledCheck.IsChecked = settings.LoggingEnabled;
         LogDirectoryBox.Text = settings.LogDirectory ?? string.Empty;
         MinimizeToTrayCheck.IsChecked = settings.MinimizeToTray;
+        PollingIntervalBox.Value = settings.PollingIntervalMinutes;
     }
 
     private async void OnBrowseClicked(object? sender, RoutedEventArgs e)
@@ -84,6 +85,7 @@ public partial class SettingsWindow : Window
             ? null
             : LogDirectoryBox.Text.Trim();
         _settings.MinimizeToTray = MinimizeToTrayCheck.IsChecked == true;
+        _settings.PollingIntervalMinutes = (int) (PollingIntervalBox.Value ?? 2);
 
         _settings.Save();
         Saved = true;

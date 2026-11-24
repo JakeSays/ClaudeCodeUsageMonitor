@@ -62,15 +62,30 @@ public static class BurnRateChartBuilder
             forecast.LineWidth = compact ? 1.5f : 2;
             forecast.MarkerSize = 0;
 
+            // A near-flat fit puts the 100% crossing millennia away, outside the
+            // range DateTime.FromOADate accepts, so only a crossing between the
+            // start of the fit window and the reset is converted to a time.
             if (!compact && !double.IsNaN(hit100X) && slope > 0)
             {
-                var hitTime = DateTime.FromOADate(hit100X);
                 var resetTime = current[^1].WeeklyResetsAt?.LocalDateTime;
-                var note = resetTime.HasValue
-                    ? hit100X < resetX
+                string note;
+                if (hit100X >= resetX)
+                {
+                    note = resetTime.HasValue
+                        ? $"Won't hit 100% before reset ({resetTime:M/d HH:mm})"
+                        : "Won't hit 100% within the next week";
+                }
+                else if (hit100X < fitXs[0])
+                {
+                    note = "At or over 100%";
+                }
+                else
+                {
+                    var hitTime = DateTime.FromOADate(hit100X);
+                    note = resetTime.HasValue
                         ? $"Hits 100% at {hitTime:M/d HH:mm} — {(resetTime.Value - hitTime).TotalHours:F1}h before reset"
-                        : $"Won't hit 100% before reset ({resetTime:M/d HH:mm})"
-                    : $"Hits 100% at {hitTime:M/d HH:mm}";
+                        : $"Hits 100% at {hitTime:M/d HH:mm}";
+                }
                 plot.Add.Annotation(note, Alignment.UpperLeft);
             }
 
@@ -113,24 +128,27 @@ public static class BurnRateChartBuilder
         return withReset.Where(s => s.WeeklyResetsAt!.Value.Date == latestResetDay).ToList();
     }
 
+    // Sums are taken around the means because the x values are OADates near
+    // 46,000: the uncentered n*Σxy - Σx*Σy cancels catastrophically and turns
+    // a flat series into a tiny nonzero slope.
     private static (double slope, double intercept) LinearFit(double[] xs, double[] ys)
     {
-        var n = xs.Length;
-        double sx = 0, sy = 0, sxx = 0, sxy = 0;
-        for (var i = 0; i < n; i++)
+        var meanX = xs.Average();
+        var meanY = ys.Average();
+        var sxx = 0.0;
+        var sxy = 0.0;
+        for (var i = 0; i < xs.Length; i++)
         {
-            sx += xs[i];
-            sy += ys[i];
-            sxx += xs[i] * xs[i];
-            sxy += xs[i] * ys[i];
+            var dx = xs[i] - meanX;
+            sxx += dx * dx;
+            sxy += dx * (ys[i] - meanY);
         }
-        var denom = n * sxx - sx * sx;
-        if (denom == 0)
+        if (sxx == 0)
         {
-            return (0, sy / n);
+            return (0, meanY);
         }
-        var slope = (n * sxy - sx * sy) / denom;
-        var intercept = (sy - slope * sx) / n;
+        var slope = sxy / sxx;
+        var intercept = meanY - slope * meanX;
         return (slope, intercept);
     }
 }

@@ -12,14 +12,14 @@
         Background="#1a1a2e"
         CanResize="False">
 
-    <Window.ContextMenu>
-        <ContextMenu>
-            <MenuItem Header="Charts..." Click="OnChartsContextMenuClicked" />
-            <MenuItem Header="Settings..." Click="OnSettingsContextMenuClicked" />
-        </ContextMenu>
-    </Window.ContextMenu>
+    <Grid RowDefinitions="Auto,Auto,*" Background="Transparent">
+        <Grid.ContextMenu>
+            <ContextMenu>
+                <MenuItem Header="Charts..." Click="OnChartsContextMenuClicked" />
+                <MenuItem Header="Settings..." Click="OnSettingsContextMenuClicked" />
+            </ContextMenu>
+        </Grid.ContextMenu>
 
-    <Grid RowDefinitions="Auto,Auto,*">
         <!-- Header -->
         <Grid Grid.Row="0" Margin="20,16,20,0">
             <TextBlock Text="Claude Code Usage"

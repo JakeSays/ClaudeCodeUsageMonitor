@@ -4,3 +4,4 @@ obj/
 .claude/
 .junie/
 *.DotSettings.user
+temp/

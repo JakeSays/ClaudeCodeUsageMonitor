@@ -25,6 +25,8 @@ public class AppSettings
     public bool LoggingEnabled { get; set; }
     public string? LogDirectory { get; set; }
 
+    public int PollingIntervalMinutes { get; set; } = 2;
+
     public static string DefaultLogDirectory => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         ".claude",
